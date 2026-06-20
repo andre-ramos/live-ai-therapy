@@ -1,0 +1,13 @@
+[Unit]
+Description=Advertise @APP_HOST@ on the LAN
+After=avahi-daemon.service network-online.target
+Requires=avahi-daemon.service
+
+[Service]
+Type=simple
+ExecStart=/usr/bin/avahi-publish-address -R @APP_HOST@ @LAN_IP@
+Restart=always
+RestartSec=3
+
+[Install]
+WantedBy=multi-user.target

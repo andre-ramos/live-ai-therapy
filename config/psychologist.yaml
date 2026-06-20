@@ -1,0 +1,73 @@
+session:
+  supported_languages: [pt-BR, en-US]
+  default_duration_minutes: 60
+
+persona:
+  file: config/personas/sandy.md
+  max_bytes: 65536
+
+default_topics:
+  enabled: true
+  use_when_user_does_not_define_topic: true
+  topics:
+    pt-BR:
+      - "Como você está se sentindo hoje?"
+      - "O que aconteceu desde a última sessão?"
+      - "Qual seria um pequeno passo útil para esta semana?"
+    en-US:
+      - "How are you feeling today?"
+      - "What has happened since the last session?"
+      - "What would be one useful small step for this week?"
+
+rag_memory:
+  enabled: true
+  retrieve_past_sessions: true
+  top_k: 8
+  similarity_threshold: 0.72
+
+conversation:
+  recent_messages_to_include: 12
+  summarize_session_on_end: true
+  extract_memories_on_end: true
+
+long_term_memory:
+  enabled: true
+  recent_session_count: 5
+  archive_top_k: 3
+  archive_similarity_threshold: 0.72
+  rebuild_every_sessions: 10
+  trigger_phrases:
+    pt-BR: ["lembra", "antes", "de novo", "novamente", "como daquela vez", "já falei", "já comentei"]
+    en-US: ["remember", "before", "again", "like last time", "I mentioned", "I told you"]
+
+vad:
+  minimum_recording_ms: 500
+  silence_duration_ms: 1000
+  maximum_recording_ms: 45000
+  post_playback_delay_ms: 500
+
+stt:
+  provider: openai
+  model: whisper-1
+
+llm:
+  provider: openai
+  model: gpt-4o-mini
+  temperature: 0.7
+
+embeddings:
+  provider: openai
+  model: text-embedding-3-small
+
+tts:
+  # ElevenLabs accepts values from 0.7 (slowest) to 1.2 (fastest).
+  speed: 1.0
+
+emergency:
+  pt_BR:
+    - "Se existe risco imediato de você se machucar ou machucar outra pessoa, não fique só."
+    - "Ligue agora para o SAMU no 192 ou para a emergência local, e procure alguém de confiança que possa ficar com você."
+    - "O CVV também oferece apoio emocional pelo 188."
+  en_US:
+    - "If there is an immediate risk of harming yourself or someone else, do not stay alone."
+    - "Call your local emergency service now and contact someone you trust who can stay with you."

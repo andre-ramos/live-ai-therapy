@@ -1,0 +1,23 @@
+[Unit]
+Description=Live AI Therapy voice assistant
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=@SERVICE_USER@
+Group=@SERVICE_USER@
+WorkingDirectory=@APP_DIR@
+EnvironmentFile=@ENV_FILE@
+ExecStartPre=@APP_DIR@/.venv/bin/alembic upgrade head
+ExecStart=@APP_DIR@/.venv/bin/uvicorn backend.app.main:app --host 127.0.0.1 --port 8088
+Restart=always
+RestartSec=3
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=@DATA_DIR@
+
+[Install]
+WantedBy=multi-user.target

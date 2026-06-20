@@ -1,0 +1,182 @@
+name: MX Linux Deploy
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      deployment_action:
+        description: Deploy main or restore the previous code snapshot
+        required: true
+        default: deploy
+        type: choice
+        options: [deploy, rollback]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: live-ai-therapy-production
+  cancel-in-progress: false
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: backend/requirements.txt
+      - run: python -m pip install -r backend/requirements.txt
+      - run: npm test
+      - run: python -m pytest backend/tests -q
+      - run: python -m alembic heads
+      - run: |
+          sudo apt-get update
+          sudo apt-get install -y shellcheck
+          bash -n install.sh scripts/check-public-repo.sh
+          shellcheck install.sh scripts/check-public-repo.sh
+      - run: bash scripts/check-public-repo.sh
+
+  deploy:
+    needs: validate
+    if: vars.MX_DEPLOY_ENABLED == 'true'
+    runs-on: [self-hosted, Linux]
+    timeout-minutes: 20
+    environment: mx-production
+    defaults:
+      run:
+        shell: bash
+    env:
+      FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
+      PROJECT_NAME: live-ai-therapy
+      REMOTE_PATH: ${{ vars.MX_DEPLOY_PATH }}
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Prepare SSH key
+        env:
+          SSH_HOST: ${{ secrets.MX_SSH_HOST }}
+          SSH_PRIVATE_KEY: ${{ secrets.MX_SSH_PRIVATE_KEY }}
+          SSH_KNOWN_HOSTS: ${{ secrets.MX_SSH_KNOWN_HOSTS }}
+        run: |
+          set -euo pipefail
+          install -d -m 700 "$HOME/.ssh"
+          printf '%s\n' "$SSH_PRIVATE_KEY" >"$HOME/.ssh/live-ai-therapy"
+          chmod 600 "$HOME/.ssh/live-ai-therapy"
+          if [[ -n "${SSH_KNOWN_HOSTS:-}" ]]; then
+            printf '%s\n' "$SSH_KNOWN_HOSTS" >"$HOME/.ssh/known_hosts"
+          else
+            ssh-keyscan -H "$SSH_HOST" >"$HOME/.ssh/known_hosts"
+          fi
+          chmod 644 "$HOME/.ssh/known_hosts"
+
+      - name: Build deployment archive
+        if: github.event_name == 'push' || inputs.deployment_action == 'deploy'
+        run: |
+          set -euo pipefail
+          tar --exclude=.git --exclude=.github --exclude=.env --exclude=.venv \
+            --exclude=data --exclude=certs --exclude=__pycache__ --exclude=.pytest_cache \
+            --exclude=config/personas/Sandy.jpeg --exclude='config/personas/*.local.md' \
+            -czf "$RUNNER_TEMP/$PROJECT_NAME.tgz" .
+
+      - name: Upload deployment archive
+        if: github.event_name == 'push' || inputs.deployment_action == 'deploy'
+        env:
+          SSH_HOST: ${{ secrets.MX_SSH_HOST }}
+          SSH_USER: ${{ secrets.MX_SSH_USER }}
+        run: scp -o BatchMode=yes -i "$HOME/.ssh/live-ai-therapy" "$RUNNER_TEMP/$PROJECT_NAME.tgz" "$SSH_USER@$SSH_HOST:/tmp/$PROJECT_NAME.tgz"
+
+      - name: Deploy or roll back
+        env:
+          SSH_HOST: ${{ secrets.MX_SSH_HOST }}
+          SSH_USER: ${{ secrets.MX_SSH_USER }}
+          DEPLOYMENT_ACTION: ${{ github.event_name == 'push' && 'deploy' || inputs.deployment_action }}
+        run: |
+          set -euo pipefail
+          ssh -o BatchMode=yes -i "$HOME/.ssh/live-ai-therapy" "$SSH_USER@$SSH_HOST" \
+            "REMOTE_PATH='$REMOTE_PATH' PROJECT_NAME='$PROJECT_NAME' DEPLOYMENT_ACTION='$DEPLOYMENT_ACTION' bash -s" <<'REMOTE_SCRIPT'
+          set -euo pipefail
+          artifact="/tmp/$PROJECT_NAME.tgz"
+          state_dir="$REMOTE_PATH/.codex-deploy"
+          previous="$state_dir/previous-code.tgz"
+          staging="$(mktemp -d)"
+          rollback_staging=""
+          cleanup() { rm -rf "$staging" "${rollback_staging:-}"; }
+          trap cleanup EXIT
+
+          [[ $REMOTE_PATH == /* && $REMOTE_PATH != / ]] || {
+            echo 'MX_DEPLOY_PATH must be a non-root absolute path.' >&2
+            exit 1
+          }
+
+          sync_code() {
+            rsync -a --delete \
+              --exclude='.env' --exclude='.venv/' --exclude='data/' --exclude='certs/' \
+              --exclude='.codex-deploy/' --exclude='config/personas/Sandy.jpeg' \
+              --exclude='config/personas/sandy.local.md' --exclude='__pycache__/' \
+              --exclude='.pytest_cache/' "$1/" "$REMOTE_PATH/"
+          }
+
+          restore_previous() {
+            [[ -f $previous ]] || { echo 'No previous deployment is available.' >&2; exit 1; }
+            rollback_staging="$(mktemp -d)"
+            tar -xzf "$previous" -C "$rollback_staging"
+            systemctl --user stop live-therapy.service || true
+            sync_code "$rollback_staging"
+            systemctl --user daemon-reload
+            systemctl --user restart live-therapy.service
+          }
+
+          health_ready() {
+            for _ in {1..30}; do
+              curl --fail --silent http://127.0.0.1:8088/api/health >/dev/null && return 0
+              sleep 1
+            done
+            return 1
+          }
+
+          if [[ $DEPLOYMENT_ACTION == rollback ]]; then
+            restore_previous
+          else
+            [[ -f $artifact ]] || { echo 'Deployment artifact is missing.' >&2; exit 1; }
+            mkdir -p "$state_dir"
+            if [[ -f "$REMOTE_PATH/config/personas/Sandy.jpeg" && ! -f "$REMOTE_PATH/config/personas/sandy.local.md" ]]; then
+              cp "$REMOTE_PATH/config/personas/sandy.md" "$REMOTE_PATH/config/personas/sandy.local.md"
+            fi
+            if [[ -f "$REMOTE_PATH/.env" ]] && ! grep -q '^PERSONA_FILE=' "$REMOTE_PATH/.env"; then
+              printf '\nPERSONA_FILE=config/personas/sandy.local.md\n' >>"$REMOTE_PATH/.env"
+              chmod 600 "$REMOTE_PATH/.env"
+            fi
+            tar --exclude=.env --exclude=.venv --exclude=data --exclude=certs \
+              --exclude=.codex-deploy --exclude=config/personas/Sandy.jpeg \
+              --exclude=config/personas/sandy.local.md --exclude=__pycache__ \
+              --exclude=.pytest_cache -czf "$previous" -C "$REMOTE_PATH" .
+            tar -xzf "$artifact" -C "$staging"
+            systemctl --user stop live-therapy.service || true
+            if ! sync_code "$staging" || ! "$REMOTE_PATH/.venv/bin/pip" install -r "$REMOTE_PATH/backend/requirements.txt"; then
+              restore_previous
+              exit 1
+            fi
+            systemctl --user daemon-reload
+            systemctl --user restart live-therapy.service
+          fi
+
+          if health_ready; then
+            exit 0
+          fi
+          if [[ $DEPLOYMENT_ACTION == deploy ]]; then
+            echo 'Health check failed; restoring previous code.' >&2
+            restore_previous
+            health_ready && exit 1
+          fi
+          journalctl --user -u live-therapy.service -n 80 --no-pager >&2
+          exit 1
+          REMOTE_SCRIPT

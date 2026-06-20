@@ -1,0 +1,53 @@
+# Runtime credentials and local overrides
+.env
+.env.*
+!.env.example
+config/personas/Sandy.jpeg
+config/personas/*.local.md
+
+# Private application state
+data/
+*.db
+*.db-*
+*.sqlite
+*.sqlite3
+certs/
+*.pem
+*.key
+*.p12
+*.pfx
+
+# Generated audio, logs, and reports
+*.log
+audio_tmp/
+coverage/
+htmlcov/
+.coverage
+site/
+
+# Python and JavaScript environments/caches
+.venv/
+venv/
+env/
+node_modules/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.tox/
+.nox/
+.npm/
+
+# Editors and operating systems
+.idea/
+.vscode/
+*.swp
+*~
+.DS_Store
+Thumbs.db
+
+# Deployment scratch files
+*.tgz
+*.tar.gz
+.codex-deploy/
