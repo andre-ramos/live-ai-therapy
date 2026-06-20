@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-forbidden_paths='(^|/)(\.env($|\.)|data/|certs/|__pycache__/|\.pytest_cache/|\.mypy_cache/|\.ruff_cache/|\.venv/|node_modules/|site/)|(^|/)Sandy\.jpeg$|\.local\.md$|\.(db|sqlite|sqlite3|pem|key|p12|pfx|log)$'
+forbidden_paths='(^|/)(\.env($|\.)|data/|certs/|__pycache__/|\.pytest_cache/|\.mypy_cache/|\.ruff_cache/|\.venv/|node_modules/|site/)|(^|/)(Sandy\.jpeg|sandy \(2\)3\.jpeg)$|\.local\.md$|\.(db|sqlite|sqlite3|pem|key|p12|pfx|log)$'
 tracked="$(git ls-files)"
 violations="$(printf '%s\n' "$tracked" | grep -Ei "$forbidden_paths" | grep -Ev '^\.env\.example$' || true)"
 if [[ -n $violations ]]; then
