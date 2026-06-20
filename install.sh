@@ -10,6 +10,7 @@ if [[ ! -r /etc/os-release ]]; then
   printf 'Cannot identify this operating system.\n' >&2
   exit 1
 fi
+# shellcheck source=/etc/os-release
 . /etc/os-release
 case "${ID:-}:${ID_LIKE:-}" in
   *debian*|*ubuntu*) ;;
