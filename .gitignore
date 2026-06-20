@@ -3,6 +3,7 @@
 .env.*
 !.env.example
 config/personas/Sandy.jpeg
+config/personas/sandy (2)3.jpeg
 config/personas/*.local.md
 
 # Private application state
