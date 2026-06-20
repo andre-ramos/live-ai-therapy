@@ -10,6 +10,7 @@ if [[ ! -r /etc/os-release ]]; then
   printf 'Cannot identify this operating system.\n' >&2
   exit 1
 fi
+# shellcheck disable=SC1091 -- validated as readable immediately above
 . /etc/os-release
 case "${ID:-}:${ID_LIKE:-}" in
   *debian*|*ubuntu*) ;;
