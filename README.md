@@ -1,23 +1,37 @@
 # Live AI Therapy
 
-Live AI Therapy is a responsive, LAN-hosted voice assistant for guided psychological-support conversations. Its configurable Sandy persona speaks with the user through OpenAI transcription and response generation, ElevenLabs speech, and language-isolated local memory.
+Live AI Therapy turns a browser into an immersive, voice-first space for guided psychological-support conversations. It listens naturally, responds with a realistic configurable voice, and builds continuity across sessions so conversations can move beyond generic check-ins and reconnect with the user's goals, experiences, and recurring themes.
+
+The included psychologist is named Sandy, but the name, portrait, background, personality, therapeutic approaches, voice, and speaking style are all configurable. The application supports complete English and Brazilian Portuguese (`pt-BR`) experiences, including the interface, speech recognition, spoken responses, summaries, and long-term session memory.
+
+## Demo
+
+![Live AI Therapy voice-session demonstration](assets/example_gif.gif)
 
 > [!IMPORTANT]
 > This is not a licensed psychologist, medical service, crisis service, or substitute for professional care. Do not rely on it as the only protection in an emergency.
 
 ## Features
 
-- Responsive dark and light interface for desktop and mobile browsers.
-- Hands-free microphone capture with voice activity detection and manual fallback.
-- OpenAI transcription, conversational responses, and embeddings.
-- ElevenLabs speech with configurable voice and speaking speed.
-- Configurable Markdown persona and evidence-informed CBT, ACT, and CFT reference material.
-- SQLite transcripts and summaries plus ChromaDB semantic memory stored on the host.
-- Language-isolated continuity across recent and older sessions.
+- Natural hands-free conversations with voice activity detection and a manual recording fallback.
+- Configurable psychologist name, portrait, background, personality, therapeutic approaches, voice, and speaking speed.
+- English and Brazilian Portuguese experiences across the interface, conversation, spoken audio, summaries, and memory.
+- Long-term conversational continuity that can reconnect recent sessions with relevant topics from older conversations.
+- Evidence-informed CBT, ACT, and CFT reference material, selected independently from the psychologist's Markdown persona.
+- Responsive dark and light themes designed for desktop and mobile browsers.
+- Live speaking, listening, processing, mute, volume, session-ending, summary, and reset interactions.
 - Draggable and collapsible session-topics panel.
 - Accessible controls, keyboard navigation, reduced-motion support, and safe-area layouts.
-- Caddy internal HTTPS, Avahi/mDNS discovery, firewall rules, and automatic systemd restart.
-- No camera access, public cloud database, authentication layer, or public Internet ingress.
+- Static psychologist portrait with no camera access or self-view.
+
+## Architecture and deployment
+
+- OpenAI provides speech transcription, conversational response generation, and embeddings.
+- ElevenLabs provides generated speech using the configured voice and speaking speed.
+- FastAPI serves the frontend and typed API, while SQLite and ChromaDB keep transcripts, summaries, and semantic memory on the host.
+- The default installation is a private, LAN-only service with no public Internet ingress or authentication layer.
+- Caddy provides internal HTTPS, Avahi/mDNS provides local discovery, and systemd provides automatic restart and service recovery.
+- Firewall rules restrict access to the configured local network.
 
 ## Quick installation
 
