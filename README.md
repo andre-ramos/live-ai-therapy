@@ -6,7 +6,9 @@ The included psychologist is named Sandy, but the name, portrait, background, pe
 
 ## Demo
 
-![Live AI Therapy voice-session demonstration](assets/example_gif.gif)
+<video src="assets/demo.mp4" controls width="100%" aria-label="Live AI Therapy voice-session demonstration"></video>
+
+[Watch the demo video](assets/demo.mp4) if the embedded player is unavailable.
 
 > [!IMPORTANT]
 > This is not a licensed psychologist, medical service, crisis service, or substitute for professional care. Do not rely on it as the only protection in an emergency.
