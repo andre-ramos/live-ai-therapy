@@ -6,6 +6,17 @@ Production rollout must follow this path: push a branch, open a pull request, me
 
 Before publishing, confirm you are working in the real git checkout for `https://github.com/andre-ramos/live-ai-therapy.git`. If the current working directory is missing `.git` or points at the wrong remote, stop and locate the canonical checkout instead of cloning an ad hoc publish copy or continuing from a detached folder.
 
+Use this publish checklist every time:
+
+1. Confirm `git remote get-url origin` matches `andre-ramos/live-ai-therapy`.
+2. Work from a non-`main` branch.
+3. Run the validation commands below from that branch.
+4. Open a pull request and wait for GitHub-hosted CI to pass.
+5. Merge the pull request into `main`.
+6. Let GitHub Actions deploy production from the merged `main` commit.
+
+When editing docs or skills, avoid personal machine paths, LAN IPs, or other host-specific deployment values in tracked repository files. `scripts/check-public-repo.sh` will fail CI if tracked content includes personal home-directory paths or private deployment addresses.
+
 Before opening a pull request, run:
 
 ```bash

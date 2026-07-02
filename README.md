@@ -192,6 +192,7 @@ The default deployment is intentionally unauthenticated and LAN-only. Do not exp
 ## Contributing
 
 See [CONTRIBUTING.md](CONTRIBUTING.md). Changes require tests and a pull request; production deploys must flow through a branch, PR, merge to `main`, and the GitHub Actions deployment workflow.
+Tracked repo files must also stay free of personal host paths or LAN IPs because `scripts/check-public-repo.sh` enforces that in CI.
 
 ## License
 
