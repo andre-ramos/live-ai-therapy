@@ -83,8 +83,13 @@ def build_opening_prompt(config: AppConfig, persona: PersonaSnapshot, continuity
     language = persona.language
     topics = config.default_topics.topics.get(language, []) if config.default_topics.enabled else []
     topic_text = "\n".join(f"- {topic}" for topic in topics)
-    continuity_text = json.dumps(continuity or {}, ensure_ascii=False, default=str)
     opening_record = _pick_opening_record(continuity)
+    opening_context = {
+        "language": continuity.get("language") if continuity else language,
+        "longitudinal_narrative": continuity.get("longitudinal_narrative", "") if continuity else "",
+        "recent_summaries": continuity.get("recent_summaries", [])[-2:] if continuity else [],
+    }
+    continuity_text = json.dumps(opening_context, ensure_ascii=False, default=str)
     opening_record_text = json.dumps(opening_record, ensure_ascii=False, default=str) if opening_record else "{}"
     if language == "pt-BR":
         return f"""REGRAS DE SEGURANÇA OBRIGATÓRIAS:
