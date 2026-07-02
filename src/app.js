@@ -387,6 +387,22 @@ async function handleUtterance(blob) {
   }
 }
 
+async function playSessionOpening(response) {
+  if (gateway.getSnapshot().phase !== PHASES.LIVE) return;
+  if (response.audio_url) {
+    gateway.dispatch({ type: "VOICE_STATE", value: VOICE_STATES.SPEAKING });
+    await playAssistantAudio(response.audio_url);
+  }
+  await new Promise((resolve) => setTimeout(resolve, APP_CONFIG.vad.postPlaybackDelayMs));
+  if (gateway.getSnapshot().phase !== PHASES.LIVE) return;
+  if (gateway.getSnapshot().isMicMuted) {
+    gateway.dispatch({ type: "VOICE_STATE", value: VOICE_STATES.IDLE });
+    return;
+  }
+  gateway.dispatch({ type: "VOICE_STATE", value: VOICE_STATES.LISTENING });
+  voiceCapture?.resume();
+}
+
 function playAssistantAudio(url) {
   responseAudio?.pause();
   responseAudio = new Audio(url);
@@ -415,7 +431,9 @@ app.addEventListener("click", async (event) => {
     voiceCapture = createVoiceCapture();
     try {
       await voiceCapture.enable();
-      await gateway.start();
+      voiceCapture.pause();
+      const response = await gateway.start();
+      await playSessionOpening(response);
     } catch (error) {
       await voiceCapture.destroy();
       voiceCapture = null;

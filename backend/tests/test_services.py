@@ -1,7 +1,13 @@
 from backend.app.config import RuntimeSettings, load_app_config
 from backend.app.persona import PersonaLoader
 from backend.app.providers import ElevenLabsProvider
-from backend.app.services import build_system_prompt, clean_for_speech, contains_imminent_risk, crisis_guidance
+from backend.app.services import (
+    build_opening_prompt,
+    build_system_prompt,
+    clean_for_speech,
+    contains_imminent_risk,
+    crisis_guidance,
+)
 
 
 def test_configuration_and_prompt_use_sandy_and_selected_approaches():
@@ -20,6 +26,32 @@ def test_configuration_and_prompt_use_sandy_and_selected_approaches():
     assert persona.approach_source == "psychologist_approaches_bilingual.md"
     assert "CBT / TCC" in persona.approach_markdown
     assert "DBT Skills" not in persona.approach_markdown
+
+
+def test_opening_prompt_prefers_single_prior_thread_and_therapist_first_language():
+    config = load_app_config()
+    persona = PersonaLoader(config, RuntimeSettings(elevenlabs_voice_id="test-voice")).load()
+    prompt = build_opening_prompt(config, persona, {
+        "recent_session_ids": ["session-new", "session-old"],
+        "active_records": [
+            {
+                "status": "deferred",
+                "importance": 0.9,
+                "source_session_id": "session-old",
+                "title": "Conversa com a mãe",
+            },
+            {
+                "status": "active",
+                "importance": 0.8,
+                "source_session_id": "session-new",
+                "title": "Ansiedade no trabalho",
+            },
+        ],
+    })
+    assert "Você fala primeiro nesta sessão" in prompt
+    assert "exatamente uma pergunta aberta no final" in prompt
+    assert '"title": "Ansiedade no trabalho"' in prompt
+    assert '"title": "Conversa com a mãe"' not in prompt
 
 
 def test_elevenlabs_request_uses_configured_speed(monkeypatch):

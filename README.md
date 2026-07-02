@@ -50,13 +50,14 @@ The installer adds an HTTPS firewall rule but does not automatically enable an i
 
 ## How a voice turn works
 
-1. The browser monitors microphone levels locally and records only a detected spoken turn.
-2. Silence, mute, manual stop, or the duration limit closes the recording.
-3. FastAPI temporarily stores the audio and sends it to OpenAI for transcription.
-4. The backend retrieves relevant same-language context and asks OpenAI for Sandy's reply.
-5. Transcript and response text are stored in local SQLite.
-6. ElevenLabs synthesizes the reply; the temporary generated audio is returned to the browser.
-7. Incoming audio is deleted after transcription unless debug audio storage is explicitly enabled.
+1. When a session starts, Sandy can open first with a gentle spoken check-in or one brief continuity thread from prior sessions.
+2. The browser waits for that opening audio to finish, then monitors microphone levels locally and records only a detected spoken turn.
+3. Silence, mute, manual stop, or the duration limit closes the recording.
+4. FastAPI temporarily stores the audio and sends it to OpenAI for transcription.
+5. The backend retrieves relevant same-language context and asks OpenAI for Sandy's reply.
+6. Transcript and response text are stored in local SQLite.
+7. ElevenLabs synthesizes the reply; the temporary generated audio is returned to the browser.
+8. Incoming audio is deleted after transcription unless debug audio storage is explicitly enabled.
 
 ```mermaid
 flowchart LR
@@ -157,7 +158,7 @@ Tests use fake providers and temporary storage, so they do not consume provider 
 | `GET` | `/api/health` | Database, persona, vector memory, and provider readiness |
 | `GET` | `/api/persona` | Safe active-persona metadata |
 | `GET` | `/api/persona/image` | Active persona portrait |
-| `POST` | `/api/session/start` | Start a session using the active persona language |
+| `POST` | `/api/session/start` | Start a session using the active persona language and optionally return Sandy's first text/audio turn |
 | `POST` | `/api/voice-turn` | Upload one recorded turn and receive text/audio response |
 | `GET` | `/api/audio/{audio_id}` | Retrieve temporary generated speech |
 | `GET` | `/api/session/{session_id}/messages` | Retrieve stored session messages |

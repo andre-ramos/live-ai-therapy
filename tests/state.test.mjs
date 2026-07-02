@@ -6,9 +6,10 @@ const topics = [{ id: "one", label: "One", completed: false }];
 
 test("moves through connecting, live, completed and summary", () => {
   let state = createInitialSession(topics);
-  state = reduceSession(state, { type: "CONNECTED", session: { session_id: "session_1" } });
+  state = reduceSession(state, { type: "CONNECTED", session: { session_id: "session_1", assistant_text: "Olá" } });
   assert.equal(state.phase, PHASES.LIVE);
-  assert.equal(state.voiceState, VOICE_STATES.LISTENING);
+  assert.equal(state.voiceState, VOICE_STATES.IDLE);
+  assert.equal(state.assistantText, "Olá");
   state = reduceSession(state, { type: "END" });
   assert.equal(state.phase, PHASES.COMPLETED);
   state = reduceSession(state, { type: "SHOW_SUMMARY" });

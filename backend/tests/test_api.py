@@ -40,6 +40,8 @@ class FakeProvider:
                     "source_message_ids": [],
                 }],
             })
+        if "REGISTRO PRIORITÁRIO PARA A ABERTURA DE HOJE" in system_prompt:
+            return "Quero começar te ouvindo com calma hoje. Como as coisas têm pesado em você ultimamente?"
         return "Entendo. Vamos observar com calma o que aconteceu?"
 
     def embed(self, texts):
@@ -106,6 +108,12 @@ def test_complete_session_api_flow():
         assert started.json()["language"] == "pt-BR"
         assert started.json()["persona_version"] == 3
         assert len(started.json()["persona_hash"]) == 64
+        assert started.json()["assistant_text"].startswith("Quero começar")
+        assert started.json()["audio_url"]
+
+        opening_audio = client.get(started.json()["audio_url"])
+        assert opening_audio.status_code == 200
+        assert opening_audio.headers["content-type"].startswith("audio/mpeg")
 
         turn = client.post(
             "/api/voice-turn",
@@ -121,7 +129,7 @@ def test_complete_session_api_flow():
         assert audio.headers["content-type"].startswith("audio/mpeg")
 
         messages = client.get(f"/api/session/{session_id}/messages")
-        assert [item["role"] for item in messages.json()["messages"]] == ["user", "assistant"]
+        assert [item["role"] for item in messages.json()["messages"]] == ["assistant", "user", "assistant"]
 
         ended = client.post(f"/api/session/{session_id}/end")
         assert ended.status_code == 200
@@ -156,3 +164,16 @@ def test_voice_turn_rejects_language_override():
         )
         assert response.status_code == 422
         assert response.json()["code"] == "persona_language_mismatch"
+
+
+def test_session_start_succeeds_without_provider_backends():
+    old_key = main.settings.openai_api_key
+    main.settings.openai_api_key = ""
+    try:
+        with TestClient(main.app) as client:
+            response = client.post("/api/session/start", json={})
+            assert response.status_code == 201
+            assert response.json()["assistant_text"] is None
+            assert response.json()["audio_url"] is None
+    finally:
+        main.settings.openai_api_key = old_key

@@ -34,6 +34,9 @@ class SessionStartResponse(BaseModel):
     persona_version: int
     persona_hash: str
     disclaimer: str | None
+    assistant_text: str | None = None
+    audio_url: str | None = None
+    warning: str | None = None
     vad: dict[str, int]
 
 
