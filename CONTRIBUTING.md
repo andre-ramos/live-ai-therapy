@@ -4,7 +4,7 @@ Create a focused branch from `main` using a `feature/`, `fix/`, `docs/`, or `cho
 
 Production rollout must follow this path: push a branch, open a pull request, merge it into `main`, and let GitHub Actions deploy from the resulting trusted `main` commit. Do not deploy production changes from a direct local push to `main`.
 
-Before publishing, confirm you are working in the real git checkout for `https://github.com/andre-ramos/live-ai-therapy.git`. If `/home/andre/codex/live-therapy` or another working directory is missing `.git` or points at the wrong remote, stop and locate the canonical checkout instead of cloning an ad hoc publish copy or continuing from a detached folder.
+Before publishing, confirm you are working in the real git checkout for `https://github.com/andre-ramos/live-ai-therapy.git`. If the current working directory is missing `.git` or points at the wrong remote, stop and locate the canonical checkout instead of cloning an ad hoc publish copy or continuing from a detached folder.
 
 Before opening a pull request, run:
 
