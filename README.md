@@ -191,7 +191,7 @@ The default deployment is intentionally unauthenticated and LAN-only. Do not exp
 
 ## Contributing
 
-See [CONTRIBUTING.md](CONTRIBUTING.md). Changes require tests and a pull request; deployments run only from trusted commits merged to `main`.
+See [CONTRIBUTING.md](CONTRIBUTING.md). Changes require tests and a pull request; production deploys must flow through a branch, PR, merge to `main`, and the GitHub Actions deployment workflow.
 
 ## License
 
