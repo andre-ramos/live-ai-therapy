@@ -4,7 +4,7 @@
 
 FastAPI serves the dependency-free HTML/CSS/ES-module frontend and JSON/multipart APIs. Uvicorn listens on loopback, while Caddy terminates internal TLS. SQLAlchemy stores sessions, messages, summaries, structured continuity, and memory metadata in SQLite. ChromaDB stores same-language semantic vectors.
 
-`backend/app/main.py` owns application composition and routes. `services.py` coordinates session state, provider calls, prompting, summary extraction, continuity updates, and cleanup. Provider interfaces isolate OpenAI and ElevenLabs from tests. `persona.py` validates and snapshots the active Markdown persona, approach reference, image, voice, and language at session start.
+`backend/app/main.py` owns application composition and routes. `services.py` coordinates session state, provider calls, prompting, therapist-first session opening, summary extraction, continuity updates, and cleanup. Provider interfaces isolate OpenAI and ElevenLabs from tests. `persona.py` validates and snapshots the active Markdown persona, approach reference, image, voice, and language at session start.
 
 ## Data and provider boundaries
 

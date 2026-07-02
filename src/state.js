@@ -59,7 +59,8 @@ export function reduceSession(state, action) {
           language: action.session.language,
           approaches: action.session.selected_approaches,
         },
-        voiceState: VOICE_STATES.LISTENING,
+        assistantText: action.session.assistant_text ?? "",
+        voiceState: VOICE_STATES.IDLE,
         error: null,
       };
     case "TICK":

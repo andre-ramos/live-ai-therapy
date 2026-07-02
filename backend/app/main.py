@@ -164,11 +164,12 @@ def legacy_persona_image():
 @app.post("/api/session/start", response_model=SessionStartResponse, status_code=201)
 def start_session(payload: SessionStartRequest, db: DbSession):
     try:
-        record = therapy.start_session(db, payload.language)
+        result = therapy.start_session(db, payload.language)
     except PersonaLanguageMismatchError as error:
         raise api_error(422, "persona_language_mismatch", str(error)) from error
     except PersonaUnavailableError as error:
         raise api_error(503, "persona_language_unavailable", str(error), True) from error
+    record = result.record
     disclaimer = {
         "pt-BR": "Sandy é uma assistente virtual de apoio psicológico e não substitui atendimento profissional ou de emergência.",
         "en-US": "Sandy is a virtual psychological support assistant and does not replace professional or emergency care.",
@@ -182,6 +183,9 @@ def start_session(payload: SessionStartRequest, db: DbSession):
         persona_version=record.persona_version,
         persona_hash=record.persona_hash,
         disclaimer=disclaimer,
+        assistant_text=result.assistant_text,
+        audio_url=f"/api/audio/{result.audio_id}" if result.audio_id else None,
+        warning=result.warning,
         vad={
             "minimum_recording_ms": config.vad.minimum_recording_ms,
             "silence_duration_ms": config.vad.silence_duration_ms,
