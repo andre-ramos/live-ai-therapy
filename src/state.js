@@ -19,6 +19,8 @@ export function createInitialSession(topics, persona = null) {
     phase: PHASES.CONNECTING,
     serverReady: false,
     providersReady: false,
+    isStartingSession: false,
+    sessionStartStatusIndex: 0,
     persona,
     sessionId: null,
     elapsedSeconds: 0,
@@ -46,10 +48,23 @@ export function reduceSession(state, action) {
         topics: action.topics ?? state.topics,
         error: null,
       };
+    case "STARTING_SESSION":
+      return {
+        ...state,
+        isStartingSession: true,
+        sessionStartStatusIndex: 0,
+        error: null,
+      };
+    case "ADVANCE_SESSION_START_STATUS":
+      return state.isStartingSession
+        ? { ...state, sessionStartStatusIndex: state.sessionStartStatusIndex + 1 }
+        : state;
     case "CONNECTED":
       return {
         ...state,
         phase: PHASES.LIVE,
+        isStartingSession: false,
+        sessionStartStatusIndex: 0,
         sessionId: action.session.session_id,
         persona: {
           ...(state.persona ?? {}),
@@ -79,7 +94,14 @@ export function reduceSession(state, action) {
         assistantText: action.payload.assistant_text,
       };
     case "ERROR":
-      return { ...state, voiceState: VOICE_STATES.ERROR, isSpeaking: false, error: action.message };
+      return {
+        ...state,
+        isStartingSession: false,
+        sessionStartStatusIndex: 0,
+        voiceState: VOICE_STATES.ERROR,
+        isSpeaking: false,
+        error: action.message,
+      };
     case "TOGGLE_MIC":
       return state.phase === PHASES.LIVE ? { ...state, isMicMuted: !state.isMicMuted } : state;
     case "TOGGLE_TOPIC":

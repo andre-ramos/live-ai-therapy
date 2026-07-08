@@ -14,6 +14,13 @@ const CATALOGS = Object.freeze({
     sessionTime: "tempo de sessão", topicsCompleted: "tópicos concluídos", topics: "Tópicos", completed: "Concluído", later: "Para retomar depois",
     reflectionTitle: "Reflexão para levar com você", reflection: "Reserve alguns minutos para reconhecer como você se sente agora. Pequenos momentos de presença também fazem parte do caminho.", finishAndHome: "Concluir e voltar ao início",
     micOffStatus: "Microfone desativado", readyStatus: "Pronta para ouvir", listeningStatus: "Ouvindo você", recordingStatus: "Você está falando", processingStatus: "{name} está refletindo…", speakingStatus: "{name} está falando",
+    startPreparingLabel: "{name} está preparando o espaço…", startPreparingSupport: "Ela vai abrir a sessão primeiro e organizar um começo acolhedor para a conversa.",
+    sessionStartLoadingPhrases: [
+      "{name} está preparando o espaço…",
+      "{name} está se organizando para te receber…",
+      "{name} está criando um começo acolhedor para a sessão…",
+      "{name} está encontrando o tom para esta conversa…",
+    ],
     errorStatus: "A sessão precisa de atenção", activeStatus: "Sessão ativa", serverUnavailable: "Servidor indisponível", localServerError: "Não foi possível acessar o servidor local.", sessionNotStarted: "A sessão ainda não foi iniciada.",
     requestFailed: "O servidor não conseguiu concluir a solicitação.", startFailed: "Não foi possível iniciar a sessão.", voiceFailed: "Não foi possível processar sua fala.", playbackFailed: "Não foi possível reproduzir a resposta de voz.",
     secureMicrophone: "O microfone exige uma conexão HTTPS segura.", unsupportedCapture: "Este navegador não oferece captura de voz compatível.", themeLight: "claro", themeDark: "escuro", switchTheme: "Mudar para tema {theme}", themeTitle: "Tema {theme}",
@@ -29,7 +36,15 @@ const CATALOGS = Object.freeze({
     closingQuote: "“Self-knowledge is an ongoing path. Take a breath and enjoy your rest.”", detailedSummary: "View detailed summary", backHome: "Back to start", privacyNote: "Local session — temporary audio is not stored", back: "← Back",
     sessionLabel: "Session with {name}", yourSummary: "Your summary", summaryPending: "Your summary is being prepared.", sessionTime: "session time", topicsCompleted: "topics completed", topics: "Topics", completed: "Completed", later: "Return to later",
     reflectionTitle: "Reflection to take with you", reflection: "Take a moment to notice how you feel now. Small moments of presence are also part of the path.", finishAndHome: "Finish and return to start",
-    micOffStatus: "Microphone off", readyStatus: "Ready to listen", listeningStatus: "Listening", recordingStatus: "You are speaking", processingStatus: "{name} is reflecting…", speakingStatus: "{name} is speaking", errorStatus: "The session needs attention", activeStatus: "Session active",
+    micOffStatus: "Microphone off", readyStatus: "Ready to listen", listeningStatus: "Listening", recordingStatus: "You are speaking", processingStatus: "{name} is reflecting…", speakingStatus: "{name} is speaking",
+    startPreparingLabel: "{name} is preparing the space…", startPreparingSupport: "She will open the session first and shape a gentle starting point for the conversation.",
+    sessionStartLoadingPhrases: [
+      "{name} is preparing the space…",
+      "{name} is getting ready to receive you…",
+      "{name} is shaping a gentle beginning for the session…",
+      "{name} is finding the tone for this conversation…",
+    ],
+    errorStatus: "The session needs attention", activeStatus: "Session active",
     serverUnavailable: "Server unavailable", localServerError: "Could not reach the local server.", sessionNotStarted: "The session has not started.", requestFailed: "The server could not complete the request.", startFailed: "Could not start the session.", voiceFailed: "Could not process your speech.",
     playbackFailed: "Could not play the voice response.", secureMicrophone: "The microphone requires a secure HTTPS connection.", unsupportedCapture: "This browser does not support compatible voice capture.", themeLight: "light", themeDark: "dark", switchTheme: "Switch to {theme} theme", themeTitle: "{theme} theme",
   },
@@ -43,6 +58,13 @@ export function translate(language, key, variables = {}) {
   const value = catalog[key] ?? CATALOGS[DEFAULT_LANGUAGE][key] ?? key;
   if (typeof value !== "string") return value;
   return value.replace(/\{(\w+)\}/g, (_, name) => String(variables[name] ?? ""));
+}
+
+export function localizedItems(language, key, variables = {}) {
+  const catalog = CATALOGS[language] ?? CATALOGS[DEFAULT_LANGUAGE];
+  const value = catalog[key] ?? CATALOGS[DEFAULT_LANGUAGE][key] ?? [];
+  if (!Array.isArray(value)) return [];
+  return value.map((item) => String(item).replace(/\{(\w+)\}/g, (_, name) => String(variables[name] ?? "")));
 }
 
 export function initialTopics() {

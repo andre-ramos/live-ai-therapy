@@ -127,6 +127,9 @@ h1, h2, p { margin-top: 0; }
 .connection-avatar img { width: 100px; height: 100px; border: 3px solid var(--surface-high); border-radius: 50%; object-fit: cover; box-shadow: var(--shadow); filter: grayscale(.35) saturate(.75); }
 .connection-ring { position: absolute; inset: 0; border: 4px solid rgba(55, 97, 114, .17); border-top-color: var(--primary); border-radius: 50%; animation: spin 1.1s linear infinite; }
 .sync-mark { position: absolute; right: 5px; bottom: 9px; width: 34px; height: 34px; display: grid; place-items: center; border: 4px solid var(--surface); border-radius: 50%; background: var(--primary); color: var(--on-primary); font-size: 1.2rem; font-weight: 900; }
+.start-loading-copy { display: grid; gap: 8px; max-width: 420px; }
+.start-loading-copy strong { color: var(--primary); font: 700 1rem/1.3 var(--font-heading); }
+.start-loading-copy p { margin: 0; }
 .loading-dots { display: flex; gap: 8px; }
 .loading-dots span { width: 7px; height: 7px; border-radius: 50%; background: var(--primary); animation: bounce 1.1s infinite ease-in-out; }
 .loading-dots span:nth-child(2) { animation-delay: .15s; }

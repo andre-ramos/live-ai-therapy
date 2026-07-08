@@ -35,6 +35,7 @@ class TherapySession(Base):
     persona_voice_id: Mapped[str | None] = mapped_column(String(128), nullable=True)
     persona_voice_model: Mapped[str | None] = mapped_column(String(100), nullable=True)
     continuity_eligible: Mapped[bool] = mapped_column(Boolean, default=False, index=True)
+    is_foundation_session: Mapped[bool] = mapped_column(Boolean, default=False, index=True)
     continuity_snapshot: Mapped[str] = mapped_column(Text, default="{}")
     status: Mapped[str] = mapped_column(String(20), default="active")
     messages: Mapped[list["Message"]] = relationship(cascade="all, delete-orphan", order_by="Message.created_at")

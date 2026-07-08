@@ -46,6 +46,7 @@ test("drives the interface from one persona language catalog", async () => {
   ]);
   assert.match(locale, /"pt-BR"/);
   assert.match(locale, /"en-US"/);
+  assert.match(locale, /sessionStartLoadingPhrases/);
   assert.match(gateway, /JSON\.stringify\(\{\}\)/);
   assert.match(state, /persona/);
 });

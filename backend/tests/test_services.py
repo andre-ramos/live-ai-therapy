@@ -3,6 +3,7 @@ from backend.app.persona import PersonaLoader
 from backend.app.providers import ElevenLabsProvider
 from backend.app.services import (
     build_opening_prompt,
+    build_summary_prompt,
     build_system_prompt,
     clean_for_speech,
     contains_imminent_risk,
@@ -52,6 +53,29 @@ def test_opening_prompt_prefers_single_prior_thread_and_therapist_first_language
     assert "exatamente uma pergunta aberta no final" in prompt
     assert '"title": "Ansiedade no trabalho"' in prompt
     assert '"title": "Conversa com a mãe"' not in prompt
+
+
+def test_foundation_session_prompts_use_intake_guidance():
+    config = load_app_config()
+    persona = PersonaLoader(config, RuntimeSettings(elevenlabs_voice_id="test-voice")).load()
+    opening = build_opening_prompt(config, persona, {}, is_foundation_session=True)
+    assert "SESSÃO FUNDACIONAL" in opening
+    assert "<foundation_session_guidelines>" in opening
+    assert "primeira consulta tem como principal objetivo" in opening
+    assert "Faça exatamente uma pergunta aberta no final" in opening
+
+    system = build_system_prompt(config, persona, [], {}, is_foundation_session=True)
+    assert "sessão fundacional" in system
+    assert "vínculo terapêutico" in system
+    assert "expectativa" in system
+
+
+def test_foundation_session_summary_prompt_preserves_intake_context():
+    prompt = build_summary_prompt([], "en-US", ["CBT"], is_foundation_session=True)[0]["content"]
+    assert "foundation session for future continuity" in prompt
+    assert "presenting complaint" in prompt
+    assert "support/resources" in prompt
+    assert "initial agreements" in prompt
 
 
 def test_elevenlabs_request_uses_configured_speed(monkeypatch):

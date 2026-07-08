@@ -50,7 +50,7 @@ The installer adds an HTTPS firewall rule but does not automatically enable an i
 
 ## How a voice turn works
 
-1. When a session starts, Sandy can open first with a gentle spoken check-in or one brief continuity thread from prior sessions.
+1. When a session starts, the browser shows a short preparation state while Sandy gets ready to speak first. If the active language has no prior ended sessions, that opening is treated as the foundation intake session for future continuity; otherwise Sandy opens with a gentle spoken check-in or one brief continuity thread from prior sessions.
 2. The browser waits for that opening audio to finish, then monitors microphone levels locally and records only a detected spoken turn.
 3. Silence, mute, manual stop, or the duration limit closes the recording.
 4. FastAPI temporarily stores the audio and sends it to OpenAI for transcription.
@@ -112,7 +112,9 @@ Important settings include:
 | `PERSONA_FILE` | Optional private persona override |
 | `MEMORY_DEBUG_ENABLED` | Debug memory endpoint; keep `false` without authentication |
 
-Application behavior is configured in `config/psychologist.yaml`, including VAD timing, model names, memory behavior, emergency guidance, and ElevenLabs speed. Supported speed values are `0.7` through `1.2`; `1.0` is normal speed.
+Application behavior is configured in `config/psychologist.yaml`, including VAD timing, model names, memory behavior, emergency guidance, foundation-session guidance, and ElevenLabs speed. Supported speed values are `0.7` through `1.2`; `1.0` is normal speed.
+
+The `foundation_session` section defines the first-session clinical frame. By default, the app treats the first session as the foundation session only when there is no prior ended session in the active language. That foundation session becomes the baseline for future continuity through the normal summary, longitudinal-record, and profile pipeline.
 
 ### Persona and portrait
 
