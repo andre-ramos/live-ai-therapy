@@ -79,6 +79,29 @@ def _pick_opening_record(continuity: dict | None) -> dict | None:
     return min(candidates, key=rank) if candidates else None
 
 
+def _opening_record_payload(record: dict | None) -> dict:
+    if not isinstance(record, dict):
+        return {}
+    # Keep the prompt payload anchored on the selected continuity record so tests
+    # and downstream prompt expectations continue to see the same JSON fields.
+    return {
+        key: value for key, value in record.items()
+        if key in {"record_type", "title", "content", "status", "confidence", "importance", "follow_up_question", "source_session_id"}
+    }
+
+
+def _opening_continuity_payload(continuity: dict | None) -> dict:
+    if not isinstance(continuity, dict):
+        return {}
+    # Opening prompts should not duplicate every candidate record in the raw
+    # continuity block; only the selected priority record belongs in the
+    # opening-specific payload.
+    return {
+        key: value for key, value in continuity.items()
+        if key != "active_records"
+    }
+
+
 def has_prior_eligible_sessions(db: Session, language: str) -> bool:
     count = db.scalar(select(func.count(TherapySession.id)).where(
         TherapySession.language == language,
@@ -97,9 +120,9 @@ def build_opening_prompt(
     language = persona.language
     topics = config.default_topics.topics.get(language, []) if config.default_topics.enabled else []
     topic_text = "\n".join(f"- {topic}" for topic in topics)
-    continuity_text = json.dumps(continuity or {}, ensure_ascii=False, default=str)
+    continuity_text = json.dumps(_opening_continuity_payload(continuity), ensure_ascii=False, default=str)
     opening_record = _pick_opening_record(continuity)
-    opening_record_text = json.dumps(opening_record, ensure_ascii=False, default=str) if opening_record else "{}"
+    opening_record_text = json.dumps(_opening_record_payload(opening_record), ensure_ascii=False, default=str)
     foundation_guidance = config.foundation_session.guidelines.get(language, "").strip()
     if language == "pt-BR":
         if is_foundation_session and foundation_guidance:

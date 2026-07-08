@@ -82,6 +82,7 @@ main.therapy.vector_memory = main.vector_memory
 
 
 def reset_session_storage():
+    main.database.create_all()
     with main.database.session_factory() as db:
         for model in (
             main.AudioLog,

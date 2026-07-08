@@ -13,7 +13,16 @@ from sqlalchemy import select, text
 from sqlalchemy.orm import Session
 
 from .config import PROJECT_ROOT, load_app_config, load_runtime_settings
-from .db import AudioLog, Database, LongitudinalRecord, Memory, Message, SessionSummary, TherapySession
+from .db import (
+    AudioLog,
+    Database,
+    LongitudinalProfile,
+    LongitudinalRecord,
+    Memory,
+    Message,
+    SessionSummary,
+    TherapySession,
+)
 from .memory import VectorMemory
 from .persona import PersonaLanguageMismatchError, PersonaLoader, PersonaUnavailableError
 from .providers import ElevenLabsProvider, OpenAIProviders, UnconfiguredProvider
