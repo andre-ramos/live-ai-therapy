@@ -62,6 +62,12 @@ class ConversationConfig(BaseModel):
     extract_memories_on_end: bool = True
 
 
+class FoundationSessionConfig(BaseModel):
+    enabled: bool = True
+    detect_when_no_prior_history: bool = True
+    guidelines: dict[str, str]
+
+
 class LongTermMemoryConfig(BaseModel):
     enabled: bool = True
     recent_session_count: int = Field(default=5, ge=1, le=20)
@@ -105,6 +111,7 @@ class AppConfig(BaseModel):
     default_topics: DefaultTopics
     rag_memory: RagConfig
     conversation: ConversationConfig
+    foundation_session: FoundationSessionConfig
     long_term_memory: LongTermMemoryConfig
     vad: VadConfig
     stt: ProviderModelConfig
@@ -123,6 +130,9 @@ class AppConfig(BaseModel):
         ]
         if missing_emergency:
             raise ValueError(f"missing emergency guidance for: {sorted(missing_emergency)}")
+        missing_foundation = set(self.session.supported_languages) - set(self.foundation_session.guidelines)
+        if missing_foundation:
+            raise ValueError(f"missing foundation session guidance for: {sorted(missing_foundation)}")
         missing_triggers = set(self.session.supported_languages) - set(self.long_term_memory.trigger_phrases)
         if missing_triggers:
             raise ValueError(f"missing long-term memory triggers for: {sorted(missing_triggers)}")

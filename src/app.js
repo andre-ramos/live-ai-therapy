@@ -1,6 +1,6 @@
 import { APP_CONFIG } from "./config.js";
 import { HttpSessionGateway } from "./gateway.js";
-import { translate } from "./locale.js";
+import { localizedItems, translate } from "./locale.js";
 import { formatElapsed, PHASES, VOICE_STATES } from "./state.js";
 import { VoiceCapture } from "./voice-capture.js";
 
@@ -14,6 +14,7 @@ let timerPhase;
 let topicFormOpen = false;
 let volumePanelOpen = false;
 let lastRenderedState;
+let sessionStartPhraseTimer;
 const widgetState = { collapsed: false, x: null, y: null };
 let dragState = null;
 let voiceCapture = null;
@@ -36,6 +37,12 @@ function therapistImageUrl(state) {
 
 function copy(state, key, variables = {}) {
   return translate(persona(state).language, key, { name: therapistName(state), ...variables });
+}
+
+function startLoadingPhrase(state) {
+  const phrases = localizedItems(persona(state).language, "sessionStartLoadingPhrases", { name: therapistName(state) });
+  if (!phrases.length) return copy(state, "startPreparingLabel");
+  return phrases[state.sessionStartStatusIndex % phrases.length];
 }
 
 function applyLocale(state) {
@@ -119,7 +126,11 @@ function controlBar(state, disabled = false) {
 }
 
 function connectingView(state) {
-  const status = copy(state, state.serverReady ? "localReady" : "connecting");
+  const isPreparing = state.isStartingSession;
+  const status = isPreparing
+    ? copy(state, "startPreparingLabel")
+    : copy(state, state.serverReady ? "localReady" : "connecting");
+  const loadingText = startLoadingPhrase(state);
   return `
     <div class="app-shell">
       ${therapistHeader(state, { status: `<span class="status-dot"></span>${status}` })}
@@ -131,9 +142,15 @@ function connectingView(state) {
             <h1 id="connecting-title">${copy(state, "sessionWith")}</h1>
             <p>${copy(state, "microphoneNotice")}</p>
           </div>
+          ${isPreparing ? `
+          <div class="start-loading-copy" aria-live="polite">
+            <strong>${escapeHtml(loadingText)}</strong>
+            <p>${copy(state, "startPreparingSupport")}</p>
+          </div>
+          <div class="loading-dots" aria-hidden="true"><span></span><span></span><span></span></div>` : ""}
           <p class="session-disclaimer">${copy(state, "disclaimer")}</p>
           ${state.error ? `<p class="inline-error" role="alert">${escapeHtml(state.error)}</p>` : ""}
-          <button class="button start-session-button" data-action="start-session" type="button" ${state.serverReady ? "" : "disabled"}>${icon("mic")} ${copy(state, "startSession")}</button>
+          <button class="button start-session-button" data-action="start-session" type="button" ${(state.serverReady && !isPreparing) ? "" : "disabled"}>${icon("mic")} ${copy(state, "startSession")}</button>
           ${state.serverReady && !state.providersReady ? `<p class="setup-warning">${copy(state, "providerWarning")}</p>` : ""}
         </section>
       </main>
@@ -253,6 +270,19 @@ function syncTimers(state) {
   }
 }
 
+function syncSessionStartTimer(state) {
+  if (state.phase === PHASES.CONNECTING && state.isStartingSession) {
+    if (!sessionStartPhraseTimer) {
+      sessionStartPhraseTimer = setInterval(() => {
+        gateway.dispatch({ type: "ADVANCE_SESSION_START_STATUS" });
+      }, 2400);
+    }
+    return;
+  }
+  clearInterval(sessionStartPhraseTimer);
+  sessionStartPhraseTimer = null;
+}
+
 function voiceStatusLabel(state) {
   const labels = {
     [VOICE_STATES.IDLE]: copy(state, state.isMicMuted ? "micOffStatus" : "readyStatus"),
@@ -340,6 +370,7 @@ function render(state) {
   if (state.phase === PHASES.COMPLETED) app.innerHTML = completedView(state);
   if (state.phase === PHASES.SUMMARY) app.innerHTML = summaryView(state);
   syncTimers(state);
+  syncSessionStartTimer(state);
   lastRenderedState = state;
   if (activeElement) app.querySelector(`[data-action="${activeElement}"]`)?.focus({ preventScroll: true });
   if (topicFormOpen) app.querySelector("#new-topic")?.focus();
@@ -428,6 +459,7 @@ app.addEventListener("click", async (event) => {
   if (!button) return;
   if (action === "start-session") {
     button.disabled = true;
+    gateway.dispatch({ type: "STARTING_SESSION" });
     voiceCapture = createVoiceCapture();
     try {
       await voiceCapture.enable();
@@ -590,6 +622,7 @@ app.addEventListener("submit", (event) => {
 });
 
 window.addEventListener("beforeunload", () => {
+  clearInterval(sessionStartPhraseTimer);
   voiceCapture?.destroy();
   gateway.disconnect();
 });

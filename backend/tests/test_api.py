@@ -40,7 +40,10 @@ class FakeProvider:
                     "source_message_ids": [],
                 }],
             })
-        if "REGISTRO PRIORITÁRIO PARA A ABERTURA DE HOJE" in system_prompt:
+        if (
+            "REGISTRO PRIORITÁRIO PARA A ABERTURA DE HOJE" in system_prompt
+            or "ESTA É A SESSÃO FUNDACIONAL" in system_prompt
+        ):
             return "Quero começar te ouvindo com calma hoje. Como as coisas têm pesado em você ultimamente?"
         return "Entendo. Vamos observar com calma o que aconteceu?"
 
@@ -81,7 +84,24 @@ main.therapy.tts = fake
 main.therapy.vector_memory = main.vector_memory
 
 
+def reset_session_storage():
+    main.database.create_all()
+    with main.database.session_factory() as db:
+        for model in (
+            main.AudioLog,
+            main.Memory,
+            main.LongitudinalRecord,
+            main.SessionSummary,
+            main.Message,
+            main.TherapySession,
+            main.LongitudinalProfile,
+        ):
+            db.query(model).delete()
+        db.commit()
+
+
 def test_complete_session_api_flow():
+    reset_session_storage()
     with TestClient(main.app) as client:
         health = client.get("/api/health")
         assert health.status_code == 200
@@ -110,6 +130,9 @@ def test_complete_session_api_flow():
         assert len(started.json()["persona_hash"]) == 64
         assert started.json()["assistant_text"].startswith("Quero começar")
         assert started.json()["audio_url"]
+        with main.database.session_factory() as db:
+            record = db.get(main.TherapySession, session_id)
+            assert record.is_foundation_session is True
 
         opening_audio = client.get(started.json()["audio_url"])
         assert opening_audio.status_code == 200
@@ -177,3 +200,17 @@ def test_session_start_succeeds_without_provider_backends():
             assert response.json()["audio_url"] is None
     finally:
         main.settings.openai_api_key = old_key
+
+
+def test_only_first_same_language_session_is_marked_as_foundation():
+    reset_session_storage()
+    with TestClient(main.app) as client:
+        first_session_id = client.post("/api/session/start", json={}).json()["session_id"]
+        assert client.post(f"/api/session/{first_session_id}/end").status_code == 200
+
+        second_session_id = client.post("/api/session/start", json={}).json()["session_id"]
+        with main.database.session_factory() as db:
+            first = db.get(main.TherapySession, first_session_id)
+            second = db.get(main.TherapySession, second_session_id)
+            assert first.is_foundation_session is True
+            assert second.is_foundation_session is False
