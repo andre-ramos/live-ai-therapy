@@ -40,7 +40,10 @@ class FakeProvider:
                     "source_message_ids": [],
                 }],
             })
-        if "REGISTRO PRIORITÁRIO PARA A ABERTURA DE HOJE" in system_prompt:
+        if (
+            "REGISTRO PRIORITÁRIO PARA A ABERTURA DE HOJE" in system_prompt
+            or "ESTA É A SESSÃO FUNDACIONAL" in system_prompt
+        ):
             return "Quero começar te ouvindo com calma hoje. Como as coisas têm pesado em você ultimamente?"
         return "Entendo. Vamos observar com calma o que aconteceu?"
 
