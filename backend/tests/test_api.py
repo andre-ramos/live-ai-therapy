@@ -21,6 +21,13 @@ class FakeProvider:
         return "Eu me senti ansioso hoje."
 
     def generate(self, system_prompt, _conversation, _temperature):
+        if '{"assistant_text":"...","topics_to_add":["..."],"end_session":false,"end_reason":null}' in system_prompt:
+            return json.dumps({
+                "assistant_text": "Entendo. Isso parece ter pesado bastante em você hoje.",
+                "topics_to_add": ["Ansiedade no trabalho"],
+                "end_session": False,
+                "end_reason": None,
+            })
         if "strict JSON" in system_prompt:
             return json.dumps({
                 "summary": "Falamos sobre ansiedade e respiração.",
@@ -40,10 +47,7 @@ class FakeProvider:
                     "source_message_ids": [],
                 }],
             })
-        if (
-            "REGISTRO PRIORITÁRIO PARA A ABERTURA DE HOJE" in system_prompt
-            or "ESTA É A SESSÃO FUNDACIONAL" in system_prompt
-        ):
+        if "REGISTRO PRIORITÁRIO PARA A ABERTURA DE HOJE" in system_prompt:
             return "Quero começar te ouvindo com calma hoje. Como as coisas têm pesado em você ultimamente?"
         return "Entendo. Vamos observar com calma o que aconteceu?"
 
@@ -73,6 +77,9 @@ class FakeVectorMemory:
         return None
 
     def delete_session(self, *_args):
+        return None
+
+    def reset(self):
         return None
 
 
@@ -130,6 +137,9 @@ def test_complete_session_api_flow():
         assert len(started.json()["persona_hash"]) == 64
         assert started.json()["assistant_text"].startswith("Quero começar")
         assert started.json()["audio_url"]
+        assert started.json()["vad"]["silence_duration_ms"] == 1800
+        assert started.json()["vad"]["idle_warning_ms"] == 45000
+        assert started.json()["vad"]["idle_end_ms"] == 60000
         with main.database.session_factory() as db:
             record = db.get(main.TherapySession, session_id)
             assert record.is_foundation_session is True
@@ -146,6 +156,9 @@ def test_complete_session_api_flow():
         assert turn.status_code == 200
         assert turn.json()["assistant_text"].startswith("Entendo")
         assert turn.json()["audio_url"]
+        assert turn.json()["topics_to_add"] == ["Ansiedade no trabalho"]
+        assert turn.json()["end_session"] is False
+        assert turn.json()["end_reason"] is None
 
         audio = client.get(turn.json()["audio_url"])
         assert audio.status_code == 200
@@ -177,6 +190,27 @@ def test_validation_and_private_debug_endpoint():
         ).status_code == 404
 
 
+def test_delete_history_clears_all_session_data():
+    reset_session_storage()
+    with TestClient(main.app) as client:
+        session_id = client.post("/api/session/start", json={}).json()["session_id"]
+        assert client.post(
+            "/api/voice-turn",
+            data={"session_id": session_id},
+            files={"audio": ("utterance.webm", b"fake-audio", "audio/webm")},
+        ).status_code == 200
+        assert client.post(f"/api/session/{session_id}/end").status_code == 200
+        assert client.delete("/api/history").status_code == 204
+        with main.database.session_factory() as db:
+            assert db.query(main.TherapySession).count() == 0
+            assert db.query(main.Message).count() == 0
+            assert db.query(main.SessionSummary).count() == 0
+            assert db.query(main.Memory).count() == 0
+            assert db.query(main.LongitudinalRecord).count() == 0
+            assert db.query(main.LongitudinalProfile).count() == 0
+            assert db.query(main.AudioLog).count() == 0
+
+
 def test_voice_turn_rejects_language_override():
     with TestClient(main.app) as client:
         session_id = client.post("/api/session/start", json={}).json()["session_id"]
@@ -187,6 +221,40 @@ def test_voice_turn_rejects_language_override():
         )
         assert response.status_code == 422
         assert response.json()["code"] == "persona_language_mismatch"
+
+
+def test_voice_turn_can_request_session_end():
+    class EndingProvider(FakeProvider):
+        def transcribe(self, _path, _language):
+            return "Podemos encerrar por aqui hoje."
+
+        def generate(self, system_prompt, _conversation, _temperature):
+            if '{"assistant_text":"...","topics_to_add":["..."],"end_session":false,"end_reason":null}' in system_prompt:
+                return json.dumps({
+                    "assistant_text": "Tudo bem. Vamos encerrar por aqui por hoje.",
+                    "topics_to_add": [],
+                    "end_session": True,
+                    "end_reason": "user_request",
+                })
+            return super().generate(system_prompt, _conversation, _temperature)
+
+    ending = EndingProvider()
+    main.therapy.stt = ending
+    main.therapy.llm = ending
+    try:
+        with TestClient(main.app) as client:
+            session_id = client.post("/api/session/start", json={}).json()["session_id"]
+            response = client.post(
+                "/api/voice-turn",
+                data={"session_id": session_id},
+                files={"audio": ("utterance.webm", b"audio", "audio/webm")},
+            )
+            assert response.status_code == 200
+            assert response.json()["end_session"] is True
+            assert response.json()["end_reason"] == "user_request"
+    finally:
+        main.therapy.stt = fake
+        main.therapy.llm = fake
 
 
 def test_session_start_succeeds_without_provider_backends():

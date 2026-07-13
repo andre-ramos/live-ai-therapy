@@ -4,7 +4,7 @@
 
 FastAPI serves the dependency-free HTML/CSS/ES-module frontend and JSON/multipart APIs. Uvicorn listens on loopback, while Caddy terminates internal TLS. SQLAlchemy stores sessions, messages, summaries, structured continuity, and memory metadata in SQLite. ChromaDB stores same-language semantic vectors.
 
-`backend/app/main.py` owns application composition and routes. `services.py` coordinates session state, provider calls, prompting, therapist-first session opening, summary extraction, continuity updates, and cleanup. Provider interfaces isolate OpenAI and ElevenLabs from tests. `persona.py` validates and snapshots the active Markdown persona, approach reference, image, voice, and language at session start.
+`backend/app/main.py` owns application composition and routes. `services.py` coordinates session state, provider calls, prompting, therapist-first session opening, structured live-turn directives, summary extraction, continuity updates, and cleanup. Provider interfaces isolate OpenAI and ElevenLabs from tests. `persona.py` validates and snapshots the active Markdown persona, approach reference, image, voice, and language at session start.
 
 ## Data and provider boundaries
 
@@ -16,7 +16,9 @@ The application is unauthenticated and designed only for a trusted LAN. Internet
 
 ## Persona and language
 
-The persona language is the source of truth for UI localization, Whisper hints, LLM output, ElevenLabs text, summaries, topics, safety guidance, and memory retrieval. Persona and approach content is reloaded for each new session and snapshotted so active sessions remain stable.
+The persona language is the source of truth for UI localization, Whisper hints, LLM output, ElevenLabs text, summaries, topics, safety guidance, idle-warning copy, and memory retrieval. Persona and approach content is reloaded for each new session and snapshotted so active sessions remain stable.
+
+Live turn responses now carry structured directives in addition to spoken text. The browser uses those directives to merge automatic session topics and to end the session after a spoken user request. Silence-based auto-close remains a browser-side responsibility driven by VAD timing returned from `/api/session/start`.
 
 The tracked persona uses `assets/sandy.jpg`. A host may set `PERSONA_FILE` to an ignored Markdown override and use an ignored portrait inside `config/personas`. Memory retrieval is restricted to exact language matches.
 

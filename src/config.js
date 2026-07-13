@@ -10,8 +10,10 @@ export const APP_CONFIG = Object.freeze({
   sessionDurationSeconds: 50 * 60,
   vad: {
     minimumRecordingMs: 500,
-    silenceDurationMs: 1000,
+    silenceDurationMs: 1800,
     maximumRecordingMs: 45000,
     postPlaybackDelayMs: 500,
+    idleWarningMs: 45000,
+    idleEndMs: 60000,
   },
 });

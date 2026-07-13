@@ -40,6 +40,12 @@ RISK_PATTERNS = (
     "vou me matar", "quero me matar", "tirar minha vida", "nao quero mais viver",
     "machucar alguém", "matar alguém", "kill myself", "suicide", "hurt someone", "kill someone",
 )
+END_REQUEST_PATTERNS = (
+    "encerrar a sessão", "encerrar por aqui", "quero encerrar", "podemos encerrar",
+    "vamos encerrar", "vamos parar por aqui", "quero parar por aqui", "podemos parar por aqui",
+    "i want to end the session", "end the session", "let's stop here", "stop here",
+    "i want to stop", "we can stop here", "can we stop here",
+)
 
 
 def clean_for_speech(text: str) -> str:
@@ -62,6 +68,18 @@ def crisis_guidance(language: str, config: AppConfig) -> str:
     return " ".join(lines)
 
 
+def normalize_topic_label(value: str) -> str:
+    return " ".join(value.split())
+
+
+def user_requested_session_end(text: str) -> bool:
+    normalized = "".join(
+        character for character in unicodedata.normalize("NFKD", text.casefold())
+        if not unicodedata.combining(character)
+    )
+    return any(pattern in normalized for pattern in END_REQUEST_PATTERNS)
+
+
 def _pick_opening_record(continuity: dict | None) -> dict | None:
     if not continuity:
         return None
@@ -79,27 +97,15 @@ def _pick_opening_record(continuity: dict | None) -> dict | None:
     return min(candidates, key=rank) if candidates else None
 
 
-def _opening_record_payload(record: dict | None) -> dict:
-    if not isinstance(record, dict):
+def _build_opening_continuity_snapshot(
+    continuity: dict | None,
+    opening_record: dict | None,
+) -> dict:
+    if not continuity:
         return {}
-    # Keep the prompt payload anchored on the selected continuity record so tests
-    # and downstream prompt expectations continue to see the same JSON fields.
-    return {
-        key: value for key, value in record.items()
-        if key in {"record_type", "title", "content", "status", "confidence", "importance", "follow_up_question", "source_session_id"}
-    }
-
-
-def _opening_continuity_payload(continuity: dict | None) -> dict:
-    if not isinstance(continuity, dict):
-        return {}
-    # Opening prompts should not duplicate every candidate record in the raw
-    # continuity block; only the selected priority record belongs in the
-    # opening-specific payload.
-    return {
-        key: value for key, value in continuity.items()
-        if key != "active_records"
-    }
+    snapshot = dict(continuity)
+    snapshot["active_records"] = [opening_record] if opening_record else []
+    return snapshot
 
 
 def has_prior_eligible_sessions(db: Session, language: str) -> bool:
@@ -120,9 +126,10 @@ def build_opening_prompt(
     language = persona.language
     topics = config.default_topics.topics.get(language, []) if config.default_topics.enabled else []
     topic_text = "\n".join(f"- {topic}" for topic in topics)
-    continuity_text = json.dumps(_opening_continuity_payload(continuity), ensure_ascii=False, default=str)
     opening_record = _pick_opening_record(continuity)
-    opening_record_text = json.dumps(_opening_record_payload(opening_record), ensure_ascii=False, default=str)
+    opening_continuity = _build_opening_continuity_snapshot(continuity, opening_record)
+    continuity_text = json.dumps(opening_continuity, ensure_ascii=False, default=str)
+    opening_record_text = json.dumps(opening_record, ensure_ascii=False, default=str) if opening_record else "{}"
     foundation_guidance = config.foundation_session.guidelines.get(language, "").strip()
     if language == "pt-BR":
         if is_foundation_session and foundation_guidance:
@@ -153,9 +160,14 @@ DIRETRIZES CLÍNICAS PARA A PRIMEIRA SESSÃO:
 {foundation_guidance}
 </foundation_session_guidelines>
 
+REGISTRO PRIORITÁRIO PARA A ABERTURA DE HOJE:
+{{"title":"sessão fundacional","status":"active"}}
+
 INSTRUÇÕES PARA A PRIMEIRA FALA:
+- Comece com uma saudação breve e acolhedora.
 - Faça uma abertura acolhedora e respeitosa.
 - Apresente brevemente o propósito desta primeira conversa e como ela pode funcionar.
+- Pergunte como a pessoa está e como as coisas têm ido.
 - Faça exatamente uma pergunta aberta no final.
 - Priorize presença, curiosidade, acolhimento e compreensão emocional profunda.
 - Ajuste o estilo: seja mais direta se a pessoa estiver difusa demais e mais exploratória se estiver racional demais.
@@ -190,8 +202,9 @@ POSSÍVEIS TÓPICOS INICIAIS, SOMENTE SE NENHUM FIO ANTERIOR SE ENCAIXAR:
 
 INSTRUÇÕES PARA A PRIMEIRA FALA:
 - Você fala primeiro nesta sessão.
+- Comece com uma saudação breve e acolhedora.
 - Se houver um registro prioritário claramente relevante, mencione no máximo um fio anterior de forma breve, natural e aberta à correção.
-- Se não houver um fio anterior claramente relevante, faça uma abertura gentil perguntando como as coisas têm ido.
+- Em qualquer caso, pergunte como a pessoa está e como as coisas têm ido.
 - Seja mais reflexiva do que investigativa.
 - Nomeie o clima emocional quando isso soar natural.
 - Faça exatamente uma pergunta aberta no final.
@@ -226,9 +239,14 @@ CLINICAL GUIDELINES FOR THE FIRST SESSION:
 {foundation_guidance}
 </foundation_session_guidelines>
 
+PRIORITY RECORD FOR TODAY'S OPENING:
+{{"title":"foundation session","status":"active"}}
+
 INSTRUCTIONS FOR THE FIRST SPOKEN TURN:
+- Begin with a brief, welcoming greeting.
 - Open in a respectful, welcoming way.
 - Briefly explain the purpose of this first conversation and how it can work.
+- Ask how the person is doing and how things have been going.
 - Ask exactly one open question at the end.
 - Prioritize presence, curiosity, emotional depth, and therapeutic alliance.
 - Adjust your style: be more direct if the person is too diffuse, and more exploratory if they are overly rationalized.
@@ -263,8 +281,9 @@ OPTIONAL OPENING TOPICS, ONLY IF NO CLEAR PRIOR THREAD FITS:
 
 INSTRUCTIONS FOR THE FIRST SPOKEN TURN:
 - You speak first in this session.
+- Begin with a brief, welcoming greeting.
 - If there is a clearly relevant priority record, briefly mention no more than one prior thread in a natural, revisable way.
-- If there is no clearly relevant prior thread, open with a gentle check-in about how things have been going.
+- In every case, ask how the person is doing and how things have been going.
 - Stay more reflective than investigative.
 - Name the emotional tone when it feels natural.
 - Ask exactly one open question at the end.
@@ -317,7 +336,8 @@ DIRETRIZES CLÍNICAS PARA A SESSÃO FUNDACIONAL:
 INSTRUÇÕES DE CONDUÇÃO:
 - Esta continua sendo a sessão fundacional; mantenha o foco em vínculo terapêutico e compreensão clínica.
 - Ajude a pessoa a nomear sentimentos, contexto, necessidade, expectativa, suporte e sinais de risco.
-- Faça no máximo uma pergunta por resposta.
+- Faça no máximo uma pergunta por resposta, e em muitas respostas não faça pergunta nenhuma.
+- Use validação, reflexão, acolhimento, comentários breves e sínteses curtas em vez de entrar sempre em modo interrogatório.
 - Evite resolver rápido demais ou prometer resultados.
 - Se a pessoa estiver muito racional, aproxime-a da experiência emocional; se estiver muito difusa, ajude com perguntas mais objetivas.
 
@@ -349,7 +369,9 @@ INSTRUÇÕES DE CONDUÇÃO:
 - A sessão já foi aberta por você; não reinicie a conversa com uma apresentação ou saudação longa.
 - Aprofunde o relato da pessoa priorizando reflexão, clareza emocional e um foco por vez.
 - Se a continuidade anterior ajudar, integre no máximo um fio de modo natural e sem insistir.
-- Faça no máximo uma pergunta por resposta.
+- Faça no máximo uma pergunta por resposta, e em muitas respostas não faça pergunta nenhuma.
+- Alterne entre validação, escuta refletida, comentários breves, nomeação emocional e perguntas abertas pontuais.
+- Em alguns momentos, apenas reconheça, acompanhe ou resuma o que a pessoa trouxe sem transformar isso em nova pergunta.
 
 Produza somente a fala natural da assistente, sem Markdown, listas longas ou metacomentários."""
     if is_foundation_session and foundation_guidance:
@@ -384,7 +406,8 @@ CLINICAL GUIDELINES FOR THE FOUNDATION SESSION:
 SESSION GUIDANCE:
 - This is still the foundation session, so keep the focus on therapeutic alliance and clinical understanding.
 - Help the person name feelings, context, needs, expectations, support, and risk cues.
-- Ask no more than one question per reply.
+- Ask no more than one question per reply, and in many replies ask none.
+- Use validation, reflection, brief supportive comments, and short summaries instead of sounding interrogative.
 - Do not rush to solutions or promise outcomes.
 - If the person is overly rational, move closer to felt experience; if they are too diffuse, add more objective structure.
 
@@ -416,9 +439,56 @@ SESSION GUIDANCE:
 - You have already opened this session, so do not restart with a long greeting or introduction.
 - Deepen the user's account through reflection, emotional clarity, and one focus at a time.
 - If prior continuity helps, integrate at most one prior thread naturally and without pushing it.
-- Ask no more than one question per reply.
+- Ask no more than one question per reply, and in many replies ask none.
+- Alternate between validation, reflective listening, brief comments, emotional naming, and occasional open questions.
+- Sometimes simply acknowledge, accompany, or summarize what the person said instead of turning it into another question.
 
 Return only the assistant's natural spoken response, without Markdown, long lists, or meta commentary."""
+
+
+def build_turn_output_prompt(language: str, user_wants_to_end: bool) -> str:
+    if language == "pt-BR":
+        ending_instruction = (
+            "- Como a pessoa pediu para encerrar, faça uma despedida breve e acolhedora, "
+            'marque "end_session": true e "end_reason": "user_request".'
+            if user_wants_to_end
+            else '- Marque "end_session": false e "end_reason": null, a menos que a pessoa esteja claramente pedindo para encerrar.'
+        )
+        return f"""Você responde em strict JSON.
+Retorne somente um objeto JSON válido com este formato:
+{{"assistant_text":"...","topics_to_add":["..."],"end_session":false,"end_reason":null}}
+
+Regras:
+- "assistant_text" deve conter apenas a fala natural da Sandy, em português brasileiro.
+- "topics_to_add" deve ter de 0 a 2 tópicos curtos, concretos e úteis, somente se a pessoa trouxe temas claros para acompanhar nesta sessão.
+- Não repita tópicos quase idênticos nem crie tópicos vagos.
+{ending_instruction}
+- Sandy não deve soar interrogatória. Ela pode validar, refletir, comentar, concordar, resumir brevemente ou apenas acolher.
+- Faça no máximo uma pergunta. Em muitas respostas, faça nenhuma.
+- Não inclua Markdown, explicações sobre o JSON, nem texto fora do objeto JSON."""
+    ending_instruction = (
+        '- Because the person asked to end, give a brief caring goodbye, set "end_session": true, and "end_reason": "user_request".'
+        if user_wants_to_end
+        else '- Set "end_session": false and "end_reason": null unless the person is clearly asking to stop.'
+    )
+    return f"""You respond in strict JSON.
+Return only one valid JSON object with this shape:
+{{"assistant_text":"...","topics_to_add":["..."],"end_session":false,"end_reason":null}}
+
+Rules:
+- "assistant_text" must contain only Sandy's natural spoken reply, in US English.
+- "topics_to_add" must contain 0 to 2 short, concrete, useful topics only when the person raised clear themes worth tracking in this session.
+- Do not repeat near-duplicate topics or create vague topics.
+{ending_instruction}
+- Sandy should not sound interrogative. She may validate, reflect, comment, agree, briefly summarize, or simply hold space.
+- Ask at most one question. In many replies, ask none.
+- Do not include Markdown, JSON explanations, or any text outside the JSON object."""
+
+
+def turn_payload_matches_language(payload: dict, language: str) -> bool:
+    values = [str(payload.get("assistant_text", ""))]
+    values.extend(str(item) for item in payload.get("topics_to_add", []) if isinstance(item, str))
+    return generated_text_matches_language(" ".join(values), language)
 
 
 def build_summary_prompt(
@@ -464,6 +534,9 @@ class VoiceResult:
     assistant_text: str
     audio_id: str | None
     warning: str | None
+    topics_to_add: list[str]
+    end_session: bool
+    end_reason: str | None
 
 
 @dataclass
@@ -665,15 +738,23 @@ class TherapyService:
             continuity,
             is_foundation_session=record.is_foundation_session,
         )
-        assistant_text = clean_for_speech(
-            self.llm.generate(system_prompt, conversation, self.config.llm.temperature)
+        user_wants_to_end = user_requested_session_end(user_text)
+        reply_payload = self._generate_turn_payload(
+            system_prompt,
+            conversation,
+            record.language,
+            user_wants_to_end,
         )
+        assistant_text = clean_for_speech(reply_payload["assistant_text"])
         if contains_imminent_risk(user_text):
             guidance = crisis_guidance(record.language, self.config)
             if guidance not in assistant_text:
                 assistant_text = f"{assistant_text} {guidance}".strip()
         audio_id, warning = self._store_assistant_audio(db, session_id, assistant_text, persona)
-        return VoiceResult(user_text, assistant_text, audio_id, warning)
+        topics_to_add = self._sanitize_topics(reply_payload.get("topics_to_add", []))
+        end_session = bool(reply_payload.get("end_session")) or user_wants_to_end
+        end_reason = "user_request" if end_session and (reply_payload.get("end_reason") == "user_request" or user_wants_to_end) else None
+        return VoiceResult(user_text, assistant_text, audio_id, warning, topics_to_add, end_session, end_reason)
 
     def _store_assistant_audio(
         self, db: Session, session_id: str, assistant_text: str, persona: PersonaSnapshot
@@ -814,6 +895,70 @@ class TherapyService:
                 ]
         logger.warning("Localized memory extraction failed: %s", type(last_error).__name__)
         return {"summary": "", "memories": []}
+
+    def _generate_turn_payload(
+        self,
+        system_prompt: str,
+        conversation: list[dict[str, str]],
+        language: str,
+        user_wants_to_end: bool,
+    ) -> dict:
+        last_error: Exception | None = None
+        prompt = f"{system_prompt}\n\n{build_turn_output_prompt(language, user_wants_to_end)}"
+        retry_conversation = list(conversation)
+        for _attempt in range(2):
+            try:
+                raw = self.llm.generate(prompt, retry_conversation, self.config.llm.temperature)
+                payload = parse_json_object(raw)
+                if not turn_payload_matches_language(payload, language):
+                    raise ValueError(f"Generated reply did not match {language}")
+                assistant_text = clean_for_speech(str(payload.get("assistant_text", "")).strip())
+                if not assistant_text:
+                    raise ValueError("Generated reply had no assistant_text")
+                payload["assistant_text"] = assistant_text
+                return payload
+            except (json.JSONDecodeError, ValueError) as error:
+                last_error = error
+                retry_conversation = [
+                    *conversation,
+                    {"role": "user", "content": (
+                        "Retry. Return valid JSON only. Keep assistant_text in português brasileiro."
+                        if language == "pt-BR"
+                        else "Retry. Return valid JSON only. Keep assistant_text in US English."
+                    )},
+                ]
+        logger.warning("Structured turn generation failed: %s", type(last_error).__name__)
+        fallback_text = (
+            "Entendo. Estou aqui com você."
+            if language == "pt-BR"
+            else "I understand. I'm here with you."
+        )
+        if user_wants_to_end:
+            fallback_text = (
+                "Tudo bem. Vamos encerrar por aqui por hoje. Obrigada por estar aqui comigo."
+                if language == "pt-BR"
+                else "That's okay. We can stop here for today. Thank you for being here with me."
+            )
+        return {
+            "assistant_text": fallback_text,
+            "topics_to_add": [],
+            "end_session": user_wants_to_end,
+            "end_reason": "user_request" if user_wants_to_end else None,
+        }
+
+    def _sanitize_topics(self, values: list) -> list[str]:
+        cleaned: list[str] = []
+        seen: set[str] = set()
+        for value in values:
+            label = normalize_topic_label(str(value).strip())
+            normalized = label.casefold()
+            if not label or normalized in seen:
+                continue
+            seen.add(normalized)
+            cleaned.append(label[:80])
+            if len(cleaned) >= 2:
+                break
+        return cleaned
 
     def _index_continuity(
         self,

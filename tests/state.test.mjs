@@ -30,8 +30,9 @@ test("tracks real voice states, responses and errors", () => {
   let state = reduceSession(createInitialSession(topics), { type: "CONNECTED", session: { session_id: "session_1" } });
   state = reduceSession(state, { type: "VOICE_STATE", value: VOICE_STATES.PROCESSING });
   assert.equal(state.voiceState, VOICE_STATES.PROCESSING);
-  state = reduceSession(state, { type: "VOICE_RESPONSE", payload: { user_text: "Olá", assistant_text: "Como você está?" } });
+  state = reduceSession(state, { type: "VOICE_RESPONSE", payload: { user_text: "Olá", assistant_text: "Como você está?", topics_to_add: ["Ansiedade no trabalho"] } });
   assert.equal(state.assistantText, "Como você está?");
+  assert.equal(state.topics.at(-1).label, "Ansiedade no trabalho");
   state = reduceSession(state, { type: "ERROR", message: "Falhou" });
   assert.equal(state.voiceState, VOICE_STATES.ERROR);
   assert.equal(state.error, "Falhou");
@@ -41,16 +42,20 @@ test("tracks session-start loading before the live session begins", () => {
   let state = createInitialSession(topics);
   state = reduceSession(state, { type: "STARTING_SESSION" });
   assert.equal(state.isStartingSession, true);
-  assert.equal(state.sessionStartStatusIndex, 0);
-  state = reduceSession(state, { type: "ADVANCE_SESSION_START_STATUS" });
-  assert.equal(state.sessionStartStatusIndex, 1);
   state = reduceSession(state, { type: "CONNECTED", session: { session_id: "session_1" } });
   assert.equal(state.isStartingSession, false);
-  assert.equal(state.sessionStartStatusIndex, 0);
 });
 
 test("ignores blank topics and formats elapsed time", () => {
   const state = createInitialSession(topics);
   assert.equal(reduceSession(state, { type: "ADD_TOPIC", id: "x", label: "  " }), state);
   assert.equal(formatElapsed(125), "02:05");
+});
+
+test("deduplicates manual and automatic topics case-insensitively", () => {
+  let state = createInitialSession([{ id: "topic-1", label: "Ansiedade no trabalho", completed: false }]);
+  state = reduceSession(state, { type: "ADD_TOPIC", id: "x", label: " ansiedade   no   trabalho " });
+  assert.equal(state.topics.length, 1);
+  state = reduceSession(state, { type: "VOICE_RESPONSE", payload: { user_text: "Olá", assistant_text: "Certo.", topics_to_add: ["Sono", "sono"] } });
+  assert.equal(state.topics.length, 2);
 });

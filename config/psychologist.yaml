@@ -230,9 +230,11 @@ long_term_memory:
 
 vad:
   minimum_recording_ms: 500
-  silence_duration_ms: 1000
+  silence_duration_ms: 1800
   maximum_recording_ms: 45000
   post_playback_delay_ms: 500
+  idle_warning_ms: 45000
+  idle_end_ms: 60000
 
 stt:
   provider: openai

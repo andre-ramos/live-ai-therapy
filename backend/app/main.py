@@ -13,16 +13,7 @@ from sqlalchemy import select, text
 from sqlalchemy.orm import Session
 
 from .config import PROJECT_ROOT, load_app_config, load_runtime_settings
-from .db import (
-    AudioLog,
-    Database,
-    LongitudinalProfile,
-    LongitudinalRecord,
-    Memory,
-    Message,
-    SessionSummary,
-    TherapySession,
-)
+from .db import AudioLog, Database, LongitudinalProfile, LongitudinalRecord, Memory, Message, SessionSummary, TherapySession
 from .memory import VectorMemory
 from .persona import PersonaLanguageMismatchError, PersonaLoader, PersonaUnavailableError
 from .providers import ElevenLabsProvider, OpenAIProviders, UnconfiguredProvider
@@ -200,6 +191,8 @@ def start_session(payload: SessionStartRequest, db: DbSession):
             "silence_duration_ms": config.vad.silence_duration_ms,
             "maximum_recording_ms": config.vad.maximum_recording_ms,
             "post_playback_delay_ms": config.vad.post_playback_delay_ms,
+            "idle_warning_ms": config.vad.idle_warning_ms,
+            "idle_end_ms": config.vad.idle_end_ms,
         },
     )
 
@@ -243,6 +236,9 @@ def voice_turn(
         assistant_text=result.assistant_text,
         audio_url=f"/api/audio/{result.audio_id}" if result.audio_id else None,
         warning=result.warning,
+        topics_to_add=result.topics_to_add,
+        end_session=result.end_session,
+        end_reason=result.end_reason,
     )
 
 
@@ -332,6 +328,20 @@ def delete_session(session_id: str, db: DbSession):
     db.delete(record)
     db.commit()
     therapy.rebuild_profile_from_storage(db, language)
+    return None
+
+
+@app.delete("/api/history", status_code=204)
+def delete_history(db: DbSession):
+    for audio in db.scalars(select(AudioLog)).all():
+        Path(audio.file_path).unlink(missing_ok=True)
+    try:
+        vector_memory.reset()
+    except Exception as error:
+        logger.warning("Vector memory reset failed during history wipe: %s", type(error).__name__)
+    for model in (AudioLog, Memory, LongitudinalRecord, SessionSummary, Message, TherapySession, LongitudinalProfile):
+        db.query(model).delete()
+    db.commit()
     return None
 
 

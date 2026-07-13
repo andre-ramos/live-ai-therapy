@@ -33,6 +33,7 @@ test("uses the HTTP API gateway and voice state machine", async () => {
   assert.match(gateway, /\/api\/session\/start/);
   assert.match(gateway, /\/api\/persona/);
   assert.match(gateway, /\/api\/voice-turn/);
+  assert.match(gateway, /idle_warning_ms/);
   assert.match(gateway, /FormData/);
   assert.match(state, /PROCESSING: "processing"/);
   assert.match(state, /SPEAKING: "speaking"/);
@@ -46,7 +47,7 @@ test("drives the interface from one persona language catalog", async () => {
   ]);
   assert.match(locale, /"pt-BR"/);
   assert.match(locale, /"en-US"/);
-  assert.match(locale, /sessionStartLoadingPhrases/);
+  assert.match(locale, /clearHistoryTitle/);
   assert.match(gateway, /JSON\.stringify\(\{\}\)/);
   assert.match(state, /persona/);
 });
@@ -100,6 +101,10 @@ test("supports theme, volume, microphone locking and meeting-end sound", async (
   assert.match(app, /event\.key === "Escape"/);
   assert.match(app, /micLocked/);
   assert.match(app, /toggle-theme/);
+  assert.match(app, /confirm-reset-history/);
+  assert.match(app, /warnAboutIdle/);
+  assert.match(app, /endCurrentSession\("silence"/);
+  assert.doesNotMatch(app, /moreOptions/);
   assert.match(app, /AudioContext/);
   assert.match(styles, /data-theme="light"/);
   assert.match(styles, /input::\-webkit-slider-thumb/);
