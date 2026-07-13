@@ -13,7 +13,7 @@ test("ships local assets and secure browser voice capture", async () => {
     readFile(new URL("styles.css", root), "utf8"),
   ]);
   assert.match(html, /viewport-fit=cover/);
-  assert.match(html, /app\.js\?v=20260620-empty-topics/);
+  assert.match(html, /app\.js\?v=20260713-history-settings/);
   assert.match(capture, /getUserMedia/);
   assert.match(capture, /MediaRecorder/);
   assert.match(capture, /isSecureContext/);
