@@ -97,6 +97,17 @@ def _pick_opening_record(continuity: dict | None) -> dict | None:
     return min(candidates, key=rank) if candidates else None
 
 
+def _build_opening_continuity_snapshot(
+    continuity: dict | None,
+    opening_record: dict | None,
+) -> dict:
+    if not continuity:
+        return {}
+    snapshot = dict(continuity)
+    snapshot["active_records"] = [opening_record] if opening_record else []
+    return snapshot
+
+
 def has_prior_eligible_sessions(db: Session, language: str) -> bool:
     count = db.scalar(select(func.count(TherapySession.id)).where(
         TherapySession.language == language,
@@ -115,8 +126,9 @@ def build_opening_prompt(
     language = persona.language
     topics = config.default_topics.topics.get(language, []) if config.default_topics.enabled else []
     topic_text = "\n".join(f"- {topic}" for topic in topics)
-    continuity_text = json.dumps(continuity or {}, ensure_ascii=False, default=str)
     opening_record = _pick_opening_record(continuity)
+    opening_continuity = _build_opening_continuity_snapshot(continuity, opening_record)
+    continuity_text = json.dumps(opening_continuity, ensure_ascii=False, default=str)
     opening_record_text = json.dumps(opening_record, ensure_ascii=False, default=str) if opening_record else "{}"
     foundation_guidance = config.foundation_session.guidelines.get(language, "").strip()
     if language == "pt-BR":
