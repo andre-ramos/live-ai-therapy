@@ -17,10 +17,12 @@ The included psychologist is named Sandy, but the name, portrait, background, pe
 - Configurable psychologist name, portrait, background, personality, therapeutic approaches, voice, and speaking speed.
 - English and Brazilian Portuguese experiences across the interface, conversation, spoken audio, summaries, and memory.
 - Long-term conversational continuity that can reconnect recent sessions with relevant topics from older conversations.
+- More conversational therapist responses that can validate, reflect, summarize briefly, or ask a single question when helpful.
 - Evidence-informed CBT, ACT, and CFT reference material, selected independently from the psychologist's Markdown persona.
 - Responsive dark and light themes designed for desktop and mobile browsers.
 - Live speaking, listening, processing, mute, volume, session-ending, summary, and reset interactions.
 - Draggable and collapsible session-topics panel.
+- Automatic session-topic suggestions based on the current conversation.
 - Accessible controls, keyboard navigation, reduced-motion support, and safe-area layouts.
 - Static psychologist portrait with no camera access or self-view.
 
@@ -52,9 +54,9 @@ The installer adds an HTTPS firewall rule but does not automatically enable an i
 
 1. When a session starts, the browser shows a short preparation state while Sandy gets ready to speak first. If the active language has no prior ended sessions, that opening is treated as the foundation intake session for future continuity; otherwise Sandy opens with a gentle spoken check-in or one brief continuity thread from prior sessions.
 2. The browser waits for that opening audio to finish, then monitors microphone levels locally and records only a detected spoken turn.
-3. Silence, mute, manual stop, or the duration limit closes the recording.
+3. Silence, mute, manual stop, or the duration limit closes the recording. If the room stays silent for long enough, Sandy gives one short idle warning and then the browser closes the session automatically.
 4. FastAPI temporarily stores the audio and sends it to OpenAI for transcription.
-5. The backend retrieves relevant same-language context and asks OpenAI for Sandy's reply.
+5. The backend retrieves relevant same-language context and asks OpenAI for Sandy's reply plus structured directives such as auto-added topics and whether the session should end.
 6. Transcript and response text are stored in local SQLite.
 7. ElevenLabs synthesizes the reply; the temporary generated audio is returned to the browser.
 8. Incoming audio is deleted after transcription unless debug audio storage is explicitly enabled.
@@ -112,7 +114,7 @@ Important settings include:
 | `PERSONA_FILE` | Optional private persona override |
 | `MEMORY_DEBUG_ENABLED` | Debug memory endpoint; keep `false` without authentication |
 
-Application behavior is configured in `config/psychologist.yaml`, including VAD timing, model names, memory behavior, emergency guidance, foundation-session guidance, and ElevenLabs speed. Supported speed values are `0.7` through `1.2`; `1.0` is normal speed.
+Application behavior is configured in `config/psychologist.yaml`, including VAD timing, idle-warning/idle-end timing, model names, memory behavior, emergency guidance, foundation-session guidance, and ElevenLabs speed. Supported speed values are `0.7` through `1.2`; `1.0` is normal speed.
 
 The `foundation_session` section defines the first-session clinical frame. By default, the app treats the first session as the foundation session only when there is no prior ended session in the active language. That foundation session becomes the baseline for future continuity through the normal summary, longitudinal-record, and profile pipeline.
 
@@ -161,7 +163,7 @@ Tests use fake providers and temporary storage, so they do not consume provider 
 | `GET` | `/api/persona` | Safe active-persona metadata |
 | `GET` | `/api/persona/image` | Active persona portrait |
 | `POST` | `/api/session/start` | Start a session using the active persona language and optionally return Sandy's first text/audio turn |
-| `POST` | `/api/voice-turn` | Upload one recorded turn and receive text/audio response |
+| `POST` | `/api/voice-turn` | Upload one recorded turn and receive text/audio response plus auto-topic and end-session directives |
 | `GET` | `/api/audio/{audio_id}` | Retrieve temporary generated speech |
 | `GET` | `/api/session/{session_id}/messages` | Retrieve stored session messages |
 | `POST` | `/api/session/{session_id}/end` | End, summarize, and extract memory |

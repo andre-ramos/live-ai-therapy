@@ -46,6 +46,9 @@ class VoiceTurnResponse(BaseModel):
     assistant_text: str
     audio_url: str | None
     warning: str | None = None
+    topics_to_add: list[str] = []
+    end_session: bool = False
+    end_reason: str | None = None
 
 
 class MessageResponse(BaseModel):

@@ -95,6 +95,8 @@ class VadConfig(BaseModel):
     silence_duration_ms: int = 1000
     maximum_recording_ms: int = 45000
     post_playback_delay_ms: int = 500
+    idle_warning_ms: int = 45000
+    idle_end_ms: int = 60000
 
 
 class EmergencyConfig(BaseModel):

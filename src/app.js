@@ -1,6 +1,6 @@
 import { APP_CONFIG } from "./config.js";
 import { HttpSessionGateway } from "./gateway.js";
-import { localizedItems, translate } from "./locale.js";
+import { translate } from "./locale.js";
 import { formatElapsed, PHASES, VOICE_STATES } from "./state.js";
 import { VoiceCapture } from "./voice-capture.js";
 
@@ -14,11 +14,18 @@ let timerPhase;
 let topicFormOpen = false;
 let volumePanelOpen = false;
 let lastRenderedState;
-let sessionStartPhraseTimer;
 const widgetState = { collapsed: false, x: null, y: null };
 let dragState = null;
 let voiceCapture = null;
 let responseAudio = null;
+let idleWarningTimer = null;
+let idleEndTimer = null;
+let idleWarningIssued = false;
+let idleWatchKey = "";
+let activeSynthUtterance = null;
+let settingsDialogOpen = false;
+let historyResetInFlight = false;
+let historyResetError = null;
 
 function persona(state = gateway.getSnapshot()) {
   return state.persona ?? {
@@ -39,10 +46,8 @@ function copy(state, key, variables = {}) {
   return translate(persona(state).language, key, { name: therapistName(state), ...variables });
 }
 
-function startLoadingPhrase(state) {
-  const phrases = localizedItems(persona(state).language, "sessionStartLoadingPhrases", { name: therapistName(state) });
-  if (!phrases.length) return copy(state, "startPreparingLabel");
-  return phrases[state.sessionStartStatusIndex % phrases.length];
+function normalizedTopicLabel(value) {
+  return String(value).trim().replace(/\s+/g, " ").toLowerCase();
 }
 
 function applyLocale(state) {
@@ -60,7 +65,6 @@ const icons = {
   micOff: '<svg viewBox="0 0 24 24"><path d="m4.3 3 16.7 16.7-1.3 1.3-4.1-4.1a7 7 0 0 1-2.6 1V21h3v2H8v-2h3v-3.1A7 7 0 0 1 5 11h2a5 5 0 0 0 7.1 4.5l-1.5-1.5H12a3 3 0 0 1-3-3V10L3 4.3 4.3 3ZM9.1 5.3 15 11.2V5a3 3 0 0 0-5.9.3ZM17 11h2c0 1.2-.3 2.3-.8 3.3l-1.5-1.5c.2-.6.3-1.2.3-1.8Z"/></svg>',
   volume: '<svg viewBox="0 0 24 24"><path d="M3 9v6h4l5 5V4L7 9H3Zm13.5 3a4.5 4.5 0 0 0-2.5-4v8a4.5 4.5 0 0 0 2.5-4ZM14 3.2v2.1a7 7 0 0 1 0 13.4v2.1a9 9 0 0 0 0-17.6Z"/></svg>',
   settings: '<svg viewBox="0 0 24 24"><path d="M19.4 13a7.8 7.8 0 0 0 .1-1 7.8 7.8 0 0 0-.1-1l2.1-1.6-2-3.5-2.5 1a7 7 0 0 0-1.7-1L15 3h-4l-.4 2.7a7 7 0 0 0-1.7 1l-2.5-1-2 3.5L6.5 11a7.8 7.8 0 0 0-.1 1 7.8 7.8 0 0 0 .1 1l-2.1 1.6 2 3.5 2.5-1a7 7 0 0 0 1.7 1L11 21h4l.4-2.7a7 7 0 0 0 1.7-1l2.5 1 2-3.5L19.4 13ZM13 17h-2l-.3-2a5 5 0 0 1-1.4-.8l-1.8.7-1-1.7L8 12a4.7 4.7 0 0 1 0-1.6L6.4 9.2l1-1.7 1.9.7a5 5 0 0 1 1.4-.8l.3-2h2l.3 2a5 5 0 0 1 1.4.8l1.8-.7 1 1.7-1.6 1.2a4.7 4.7 0 0 1 0 1.6l1.6 1.2-1 1.7-1.8-.7a5 5 0 0 1-1.4.8L13 17Zm-1-2.5a2.5 2.5 0 1 0 0-5 2.5 2.5 0 0 0 0 5Z"/></svg>',
-  more: '<svg viewBox="0 0 24 24"><circle cx="5" cy="12" r="2"/><circle cx="12" cy="12" r="2"/><circle cx="19" cy="12" r="2"/></svg>',
   notes: '<svg viewBox="0 0 24 24"><path d="M19 3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V5a2 2 0 0 0-2-2Zm0 16H5V5h14v14ZM7 7h10v2H7V7Zm0 4h10v2H7v-2Zm0 4h7v2H7v-2Z"/></svg>',
   check: '<svg viewBox="0 0 24 24"><path d="m9 16.2-4.2-4.2-1.4 1.4L9 19 21 7l-1.4-1.4L9 16.2Z"/></svg>',
   lock: '<svg viewBox="0 0 24 24"><path d="M18 8h-1V6a5 5 0 0 0-10 0v2H6a2 2 0 0 0-2 2v10a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V10a2 2 0 0 0-2-2ZM9 6a3 3 0 0 1 6 0v2H9V6Zm9 14H6V10h12v10Z"/></svg>',
@@ -104,24 +108,30 @@ function therapistHeader(state, options = {}) {
     </header>`;
 }
 
-function controlBar(state, disabled = false) {
-  const micLocked = !disabled && [VOICE_STATES.PROCESSING, VOICE_STATES.SPEAKING].includes(state.voiceState);
-  const micDisabled = disabled || micLocked;
+function controlBar(state, options = {}) {
+  const {
+    disableVolume = false,
+    disableMic = false,
+    disableSettings = false,
+  } = options;
+  const micLocked = !disableMic && [VOICE_STATES.PROCESSING, VOICE_STATES.SPEAKING].includes(state.voiceState);
+  const micDisabled = disableMic || micLocked || historyResetInFlight;
+  const volumeDisabled = disableVolume || historyResetInFlight;
+  const settingsDisabled = disableSettings || historyResetInFlight;
   return `
     <nav class="control-bar" aria-label="${copy(state, "sessionControls")}">
       <div class="volume-popover">
-        <button class="icon-button volume-trigger" type="button" data-action="toggle-volume" aria-expanded="${volumePanelOpen}" aria-controls="volume-slider-panel" aria-label="${copy(state, volumePanelOpen ? "volumeClose" : "volumeOpen")}" ${disabled ? "disabled" : ""}>${icon("volume")}</button>
-        <div id="volume-slider-panel" class="volume-slider-panel" ${volumePanelOpen && !disabled ? "" : "hidden"}>
+        <button class="icon-button volume-trigger" type="button" data-action="toggle-volume" aria-expanded="${volumePanelOpen}" aria-controls="volume-slider-panel" aria-label="${copy(state, volumePanelOpen ? "volumeClose" : "volumeOpen")}" ${volumeDisabled ? "disabled" : ""}>${icon("volume")}</button>
+        <div id="volume-slider-panel" class="volume-slider-panel" ${volumePanelOpen && !volumeDisabled ? "" : "hidden"}>
           <label class="volume-control" style="--volume-level:${volumeLevel}%">
             <span>${copy(state, "volume")}</span>
-            <input type="range" data-volume min="0" max="100" step="1" value="${volumeLevel}" aria-label="${copy(state, "sessionVolume", { value: volumeLevel })}" />
+            <input type="range" data-volume min="0" max="100" step="1" value="${volumeLevel}" aria-label="${copy(state, "sessionVolume", { value: volumeLevel })}" ${volumeDisabled ? "disabled" : ""} />
             <output>${volumeLevel}%</output>
           </label>
         </div>
       </div>
       <button class="icon-button ${state.isMicMuted ? "icon-button--danger" : "icon-button--active"} ${micLocked ? "icon-button--locked" : ""}" type="button" data-action="toggle-mic" aria-pressed="${state.isMicMuted}" aria-label="${micLocked ? copy(state, "micLocked") : copy(state, state.isMicMuted ? "micEnable" : "micDisable")}" title="${micLocked ? copy(state, "waitForVoice") : copy(state, "microphone")}" ${micDisabled ? "disabled" : ""}>${icon(state.isMicMuted ? "micOff" : "mic")}${micLocked ? `<span class="control-lock">${icon("lock")}</span>` : ""}</button>
-      <button class="icon-button" type="button" aria-label="${copy(state, "settings")}" ${disabled ? "disabled" : ""}>${icon("settings")}</button>
-      <button class="icon-button" type="button" aria-label="${copy(state, "moreOptions")}" ${disabled ? "disabled" : ""}>${icon("more")}</button>
+      <button class="icon-button" type="button" data-action="open-settings" aria-label="${copy(state, "settings")}" ${settingsDisabled ? "disabled" : ""}>${icon("settings")}</button>
     </nav>`;
 }
 
@@ -130,13 +140,12 @@ function connectingView(state) {
   const status = isPreparing
     ? copy(state, "startPreparingLabel")
     : copy(state, state.serverReady ? "localReady" : "connecting");
-  const loadingText = startLoadingPhrase(state);
   return `
     <div class="app-shell">
       ${therapistHeader(state, { status: `<span class="status-dot"></span>${status}` })}
       <main id="main-content" class="connecting-main">
         <div class="ambient-photo" aria-hidden="true"><img src="${escapeHtml(therapistImageUrl(state))}" alt="" /></div>
-        <section class="connecting-card" aria-labelledby="connecting-title">
+        <section class="connecting-card" aria-labelledby="connecting-title" ${isPreparing ? 'aria-busy="true"' : ""}>
           <div class="connection-avatar"><span class="connection-ring"></span><img src="${escapeHtml(therapistImageUrl(state))}" alt="" /><span class="sync-mark" aria-hidden="true">↻</span></div>
           <div>
             <h1 id="connecting-title">${copy(state, "sessionWith")}</h1>
@@ -144,7 +153,7 @@ function connectingView(state) {
           </div>
           ${isPreparing ? `
           <div class="start-loading-copy" aria-live="polite">
-            <strong>${escapeHtml(loadingText)}</strong>
+            <strong>${escapeHtml(copy(state, "startPreparingLabel"))}</strong>
             <p>${copy(state, "startPreparingSupport")}</p>
           </div>
           <div class="loading-dots" aria-hidden="true"><span></span><span></span><span></span></div>` : ""}
@@ -154,7 +163,7 @@ function connectingView(state) {
           ${state.serverReady && !state.providersReady ? `<p class="setup-warning">${copy(state, "providerWarning")}</p>` : ""}
         </section>
       </main>
-      ${controlBar(state, true)}
+      ${controlBar(state, { disableVolume: true, disableMic: true })}
     </div>`;
 }
 
@@ -213,6 +222,13 @@ function liveView(state) {
     </div>`;
 }
 
+function completionMessage(state) {
+  if (state.endReason === "cancelled") return copy(state, "cancelledMessage");
+  if (state.endReason === "user_request") return copy(state, "userEndedMessage");
+  if (state.endReason === "silence") return copy(state, "silenceEndedMessage");
+  return copy(state, "completedMessage");
+}
+
 function completedView(state) {
   const cancelled = state.endReason === "cancelled";
   const completedTopics = state.topics.filter((topic) => topic.completed);
@@ -225,7 +241,7 @@ function completedView(state) {
         <section class="completion-content" aria-labelledby="completion-title">
           <div class="success-mark">${icon("check")}</div>
           <h1 id="completion-title">${copy(state, cancelled ? "sessionCancelled" : "sessionEnded")}</h1>
-          <p>${copy(state, cancelled ? "cancelledMessage" : "completedMessage")}</p>
+          <p>${completionMessage(state)}</p>
           <div class="summary-card">
             <h2>${icon("notes")} ${copy(state, "completedTopics")}</h2>
             <ul>${displayTopics.map((topic, index) => `<li style="--delay:${index * 80 + 100}ms">${icon("check")}<span>${escapeHtml(topic.label)}</span></li>`).join("")}</ul>
@@ -261,6 +277,23 @@ function summaryView(state) {
     </div>`;
 }
 
+function settingsDialog(state) {
+  if (!settingsDialogOpen) return "";
+  return `
+    <div class="dialog-backdrop" aria-hidden="${historyResetInFlight}">
+      <section class="settings-dialog" role="dialog" aria-modal="true" aria-labelledby="settings-dialog-title" aria-describedby="settings-dialog-body">
+        <p class="eyebrow">${copy(state, "settings")}</p>
+        <h2 id="settings-dialog-title">${copy(state, "clearHistoryTitle")}</h2>
+        <p id="settings-dialog-body">${copy(state, "clearHistoryBody")}</p>
+        ${historyResetError ? `<p class="inline-error" role="alert">${escapeHtml(historyResetError)}</p>` : ""}
+        <div class="settings-dialog__actions">
+          <button class="button button--danger" type="button" data-action="confirm-reset-history" ${historyResetInFlight ? "disabled" : ""}>${historyResetInFlight ? copy(state, "clearHistoryProcessing") : copy(state, "clearHistoryConfirm")}</button>
+          <button class="button button--secondary" type="button" data-action="close-settings" ${historyResetInFlight ? "disabled" : ""}>${copy(state, "clearHistoryCancel")}</button>
+        </div>
+      </section>
+    </div>`;
+}
+
 function syncTimers(state) {
   if (timerPhase === state.phase) return;
   timerPhase = state.phase;
@@ -270,17 +303,93 @@ function syncTimers(state) {
   }
 }
 
-function syncSessionStartTimer(state) {
-  if (state.phase === PHASES.CONNECTING && state.isStartingSession) {
-    if (!sessionStartPhraseTimer) {
-      sessionStartPhraseTimer = setInterval(() => {
-        gateway.dispatch({ type: "ADVANCE_SESSION_START_STATUS" });
-      }, 2400);
-    }
+function clearIdleTimers() {
+  clearTimeout(idleWarningTimer);
+  clearTimeout(idleEndTimer);
+  idleWarningTimer = null;
+  idleEndTimer = null;
+  idleWarningIssued = false;
+  idleWatchKey = "";
+}
+
+function canTrackIdle(state) {
+  return (
+    state.phase === PHASES.LIVE
+    && !state.isMicMuted
+    && state.voiceState === VOICE_STATES.LISTENING
+    && !state.isSpeaking
+  );
+}
+
+function stopSynthWarning() {
+  if (window.speechSynthesis && activeSynthUtterance) {
+    window.speechSynthesis.cancel();
+  }
+  activeSynthUtterance = null;
+}
+
+function playLocalSpeech(text, language) {
+  if (!("speechSynthesis" in window) || !text) return Promise.resolve();
+  stopSynthWarning();
+  const utterance = new SpeechSynthesisUtterance(text);
+  utterance.lang = language === "pt-BR" ? "pt-BR" : "en-US";
+  utterance.rate = 1;
+  activeSynthUtterance = utterance;
+  return new Promise((resolve) => {
+    utterance.addEventListener("end", () => {
+      if (activeSynthUtterance === utterance) activeSynthUtterance = null;
+      resolve();
+    }, { once: true });
+    utterance.addEventListener("error", () => {
+      if (activeSynthUtterance === utterance) activeSynthUtterance = null;
+      resolve();
+    }, { once: true });
+    window.speechSynthesis.speak(utterance);
+  });
+}
+
+async function warnAboutIdle() {
+  const state = gateway.getSnapshot();
+  if (!canTrackIdle(state) || idleWarningIssued) return;
+  idleWarningIssued = true;
+  const warningText = copy(state, "idleWarning");
+  voiceCapture?.pause();
+  gateway.dispatch({ type: "SET_ASSISTANT_TEXT", value: warningText });
+  await playLocalSpeech(warningText, persona(state).language);
+  const current = gateway.getSnapshot();
+  if (!canTrackIdle(current)) return;
+  voiceCapture?.resume();
+}
+
+async function endCurrentSession(reason, options = {}) {
+  const { playSound = false } = options;
+  clearIdleTimers();
+  stopSynthWarning();
+  volumePanelOpen = false;
+  if (playSound) playMeetingEndSound();
+  responseAudio?.pause();
+  await voiceCapture?.destroy();
+  voiceCapture = null;
+  gateway.dispatch({ type: "END", reason });
+  gateway.end().catch(() => {});
+}
+
+function syncIdleWatch(state) {
+  if (!canTrackIdle(state)) {
+    clearIdleTimers();
     return;
   }
-  clearInterval(sessionStartPhraseTimer);
-  sessionStartPhraseTimer = null;
+  const nextKey = `${state.sessionId}:${state.phase}:${state.voiceState}:${state.isMicMuted}:${state.isSpeaking}`;
+  if (idleWatchKey === nextKey && idleWarningTimer && idleEndTimer) return;
+  idleWatchKey = nextKey;
+  clearTimeout(idleWarningTimer);
+  clearTimeout(idleEndTimer);
+  idleWarningTimer = setTimeout(() => {
+    warnAboutIdle().catch(() => {});
+  }, APP_CONFIG.vad.idleWarningMs);
+  idleEndTimer = setTimeout(() => {
+    if (canTrackIdle(gateway.getSnapshot())) endCurrentSession("silence").catch(() => {});
+  }, APP_CONFIG.vad.idleEndMs);
 }
 
 function voiceStatusLabel(state) {
@@ -369,12 +478,40 @@ function render(state) {
   if (state.phase === PHASES.LIVE) app.innerHTML = liveView(state);
   if (state.phase === PHASES.COMPLETED) app.innerHTML = completedView(state);
   if (state.phase === PHASES.SUMMARY) app.innerHTML = summaryView(state);
+  app.insertAdjacentHTML("beforeend", settingsDialog(state));
   syncTimers(state);
-  syncSessionStartTimer(state);
+  syncIdleWatch(state);
   lastRenderedState = state;
   if (activeElement) app.querySelector(`[data-action="${activeElement}"]`)?.focus({ preventScroll: true });
   if (topicFormOpen) app.querySelector("#new-topic")?.focus();
   requestAnimationFrame(clampWidgetPosition);
+}
+
+async function clearHistoryAndRestart() {
+  clearIdleTimers();
+  stopSynthWarning();
+  historyResetInFlight = true;
+  historyResetError = null;
+  volumePanelOpen = false;
+  render(gateway.getSnapshot());
+  responseAudio?.pause();
+  responseAudio = null;
+  await voiceCapture?.destroy();
+  voiceCapture = null;
+  try {
+    await gateway.clearHistory();
+    settingsDialogOpen = false;
+    historyResetInFlight = false;
+    topicFormOpen = false;
+    widgetState.collapsed = false;
+    widgetState.x = null;
+    widgetState.y = null;
+    gateway.reset();
+  } catch (error) {
+    historyResetInFlight = false;
+    historyResetError = error.message || copy(gateway.getSnapshot(), "clearHistoryError");
+    render(gateway.getSnapshot());
+  }
 }
 
 function createVoiceCapture() {
@@ -395,6 +532,7 @@ function createVoiceCapture() {
 }
 
 async function handleUtterance(blob) {
+  clearIdleTimers();
   voiceCapture?.pause();
   gateway.dispatch({ type: "VOICE_STATE", value: VOICE_STATES.PROCESSING });
   try {
@@ -403,6 +541,10 @@ async function handleUtterance(blob) {
     if (response.audio_url) {
       gateway.dispatch({ type: "VOICE_STATE", value: VOICE_STATES.SPEAKING });
       await playAssistantAudio(response.audio_url);
+    }
+    if (response.end_session) {
+      await endCurrentSession(response.end_reason === "user_request" ? "user_request" : "completed");
+      return;
     }
     await new Promise((resolve) => setTimeout(resolve, APP_CONFIG.vad.postPlaybackDelayMs));
     if (gateway.getSnapshot().isMicMuted) {
@@ -419,6 +561,7 @@ async function handleUtterance(blob) {
 }
 
 async function playSessionOpening(response) {
+  clearIdleTimers();
   if (gateway.getSnapshot().phase !== PHASES.LIVE) return;
   if (response.audio_url) {
     gateway.dispatch({ type: "VOICE_STATE", value: VOICE_STATES.SPEAKING });
@@ -446,6 +589,16 @@ function playAssistantAudio(url) {
 }
 
 app.addEventListener("click", async (event) => {
+  if (
+    settingsDialogOpen
+    && event.target.classList?.contains("dialog-backdrop")
+    && !historyResetInFlight
+  ) {
+    settingsDialogOpen = false;
+    historyResetError = null;
+    render(gateway.getSnapshot());
+    return;
+  }
   const button = event.target.closest("[data-action]");
   const action = button?.dataset.action;
   const insideVolume = event.target.closest(".volume-popover");
@@ -457,6 +610,7 @@ app.addEventListener("click", async (event) => {
     }
   }
   if (!button) return;
+  if (historyResetInFlight && !["close-settings", "confirm-reset-history"].includes(action)) return;
   if (action === "start-session") {
     button.disabled = true;
     gateway.dispatch({ type: "STARTING_SESSION" });
@@ -493,18 +647,29 @@ app.addEventListener("click", async (event) => {
     applyTheme();
     render(gateway.getSnapshot());
   }
+  if (action === "open-settings") {
+    settingsDialogOpen = true;
+    historyResetError = null;
+    render(gateway.getSnapshot());
+    return;
+  }
+  if (action === "close-settings") {
+    if (!historyResetInFlight) {
+      settingsDialogOpen = false;
+      historyResetError = null;
+      render(gateway.getSnapshot());
+    }
+    return;
+  }
+  if (action === "confirm-reset-history") {
+    await clearHistoryAndRestart();
+    return;
+  }
   if (action === "end") {
-    volumePanelOpen = false;
-    playMeetingEndSound();
-    responseAudio?.pause();
-    await voiceCapture?.destroy();
-    gateway.dispatch({ type: "END", reason: "completed" });
-    gateway.end().catch(() => {});
+    await endCurrentSession("completed", { playSound: true });
   }
   if (action === "cancel") {
-    volumePanelOpen = false;
-    playMeetingEndSound();
-    gateway.dispatch({ type: "END", reason: "cancelled" });
+    await endCurrentSession("cancelled", { playSound: true });
   }
   if (action === "summary") gateway.dispatch({ type: "SHOW_SUMMARY" });
   if (action === "back-completed") gateway.dispatch({ type: "BACK_TO_COMPLETED" });
@@ -516,9 +681,13 @@ app.addEventListener("click", async (event) => {
   if (action === "reset") {
     topicFormOpen = false;
     volumePanelOpen = false;
+    settingsDialogOpen = false;
+    historyResetError = null;
     widgetState.collapsed = false;
     widgetState.x = null;
     widgetState.y = null;
+    clearIdleTimers();
+    stopSynthWarning();
     responseAudio = null;
     voiceCapture = null;
     gateway.reset();
@@ -622,7 +791,8 @@ app.addEventListener("submit", (event) => {
 });
 
 window.addEventListener("beforeunload", () => {
-  clearInterval(sessionStartPhraseTimer);
+  clearIdleTimers();
+  stopSynthWarning();
   voiceCapture?.destroy();
   gateway.disconnect();
 });

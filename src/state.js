@@ -14,13 +14,29 @@ export const VOICE_STATES = Object.freeze({
   ERROR: "error",
 });
 
+function normalizeTopicLabel(value) {
+  return String(value).trim().replace(/\s+/g, " ");
+}
+
+function mergeTopics(existingTopics, labels = []) {
+  const seen = new Set(existingTopics.map((topic) => normalizeTopicLabel(topic.label).toLowerCase()));
+  const additions = [];
+  for (const rawLabel of labels) {
+    const label = normalizeTopicLabel(rawLabel);
+    const key = label.toLowerCase();
+    if (!label || seen.has(key)) continue;
+    seen.add(key);
+    additions.push({ id: `topic-auto-${existingTopics.length + additions.length + 1}-${Date.now()}`, label, completed: false });
+  }
+  return additions.length ? [...existingTopics, ...additions] : existingTopics;
+}
+
 export function createInitialSession(topics, persona = null) {
   return {
     phase: PHASES.CONNECTING,
     serverReady: false,
     providersReady: false,
     isStartingSession: false,
-    sessionStartStatusIndex: 0,
     persona,
     sessionId: null,
     elapsedSeconds: 0,
@@ -52,19 +68,13 @@ export function reduceSession(state, action) {
       return {
         ...state,
         isStartingSession: true,
-        sessionStartStatusIndex: 0,
         error: null,
       };
-    case "ADVANCE_SESSION_START_STATUS":
-      return state.isStartingSession
-        ? { ...state, sessionStartStatusIndex: state.sessionStartStatusIndex + 1 }
-        : state;
     case "CONNECTED":
       return {
         ...state,
         phase: PHASES.LIVE,
         isStartingSession: false,
-        sessionStartStatusIndex: 0,
         sessionId: action.session.session_id,
         persona: {
           ...(state.persona ?? {}),
@@ -92,12 +102,17 @@ export function reduceSession(state, action) {
         ...state,
         transcript: action.payload.user_text,
         assistantText: action.payload.assistant_text,
+        topics: mergeTopics(state.topics, action.payload.topics_to_add),
+      };
+    case "SET_ASSISTANT_TEXT":
+      return {
+        ...state,
+        assistantText: action.value,
       };
     case "ERROR":
       return {
         ...state,
         isStartingSession: false,
-        sessionStartStatusIndex: 0,
         voiceState: VOICE_STATES.ERROR,
         isSpeaking: false,
         error: action.message,
@@ -108,7 +123,9 @@ export function reduceSession(state, action) {
       return { ...state, topics: state.topics.map((topic) => topic.id === action.id ? { ...topic, completed: !topic.completed } : topic) };
     case "ADD_TOPIC": {
       const label = action.label.trim();
-      return label ? { ...state, topics: [...state.topics, { id: action.id, label, completed: false }] } : state;
+      if (!label) return state;
+      const topics = mergeTopics(state.topics, [label]);
+      return topics === state.topics ? state : { ...state, topics };
     }
     case "END":
       return { ...state, phase: PHASES.COMPLETED, voiceState: VOICE_STATES.IDLE, isSpeaking: false, endReason: action.reason ?? "completed" };

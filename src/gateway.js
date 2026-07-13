@@ -5,6 +5,7 @@ export class SessionGateway {
   connect() { throw new Error("connect() must be implemented"); }
   start() { throw new Error("start() must be implemented"); }
   end() { throw new Error("end() must be implemented"); }
+  clearHistory() { throw new Error("clearHistory() must be implemented"); }
   voiceTurn() { throw new Error("voiceTurn() must be implemented"); }
   subscribe() { throw new Error("subscribe() must be implemented"); }
   dispatch() { throw new Error("dispatch() must be implemented"); }
@@ -72,6 +73,14 @@ export class HttpSessionGateway extends SessionGateway {
       signal: this.#abortController.signal,
     });
     const payload = await parseResponse(response);
+    Object.assign(this.config.vad, {
+      minimumRecordingMs: payload.vad?.minimum_recording_ms ?? this.config.vad.minimumRecordingMs,
+      silenceDurationMs: payload.vad?.silence_duration_ms ?? this.config.vad.silenceDurationMs,
+      maximumRecordingMs: payload.vad?.maximum_recording_ms ?? this.config.vad.maximumRecordingMs,
+      postPlaybackDelayMs: payload.vad?.post_playback_delay_ms ?? this.config.vad.postPlaybackDelayMs,
+      idleWarningMs: payload.vad?.idle_warning_ms ?? this.config.vad.idleWarningMs,
+      idleEndMs: payload.vad?.idle_end_ms ?? this.config.vad.idleEndMs,
+    });
     this.dispatch({ type: "CONNECTED", session: payload });
     return payload;
   }
@@ -104,6 +113,15 @@ export class HttpSessionGateway extends SessionGateway {
     return payload;
   }
 
+  async clearHistory() {
+    const response = await this.fetch("/api/history", {
+      method: "DELETE",
+      signal: this.#abortController.signal,
+    });
+    await parseResponse(response);
+    return null;
+  }
+
   disconnect() {
     this.#abortController.abort();
   }
@@ -118,6 +136,12 @@ export class HttpSessionGateway extends SessionGateway {
 }
 
 async function parseResponse(response) {
+  if (response.status === 204) {
+    if (!response.ok) {
+      throw new Error(translate("pt-BR", "requestFailed"));
+    }
+    return {};
+  }
   const payload = await response.json().catch(() => ({}));
   if (!response.ok) {
     const error = new Error(payload.message || translate("pt-BR", "requestFailed"));

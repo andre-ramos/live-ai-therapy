@@ -22,6 +22,7 @@ def test_configuration_and_prompt_use_sandy_and_selected_approaches():
     assert "A pessoa prefere exercícios curtos" in prompt
     assert "diagnostique" in prompt
     assert "exclusivamente em português brasileiro" in prompt
+    assert "não faça pergunta nenhuma" in prompt
     assert persona.markdown in prompt
     assert persona.approach_markdown in prompt
     assert persona.approach_source == "psychologist_approaches_bilingual.md"
@@ -50,6 +51,7 @@ def test_opening_prompt_prefers_single_prior_thread_and_therapist_first_language
         ],
     })
     assert "Você fala primeiro nesta sessão" in prompt
+    assert "saudação breve e acolhedora" in prompt
     assert "exatamente uma pergunta aberta no final" in prompt
     assert '"title": "Ansiedade no trabalho"' in prompt
     assert '"title": "Conversa com a mãe"' not in prompt
